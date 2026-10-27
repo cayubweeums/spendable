@@ -220,6 +220,7 @@ export function computeSpendable(input: Input): Snapshot {
       note: txn.note ?? "",
       tags: txn.tags ?? [],
       cleared: txn.cleared === true,
+      splits: txn.splits ?? [],
       currency: names.get(txn.accountId)?.currency ?? currency,
     }));
 

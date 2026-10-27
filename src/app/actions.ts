@@ -286,6 +286,8 @@ export async function saveTransaction(formData: FormData) {
   await requirePage();
   try {
     const categoryRaw = String(formData.get("category") ?? "");
+    const amounts = formData.getAll("split-amount").map(String);
+    const categories = formData.getAll("split-category").map(String);
     saveTransactionDetails({
       id: String(formData.get("id") ?? ""),
       category: categoryRaw.trim() === "" ? null : categoryRaw,
@@ -295,6 +297,7 @@ export async function saveTransaction(formData: FormData) {
       recurring: formData.get("recurring") === "1",
       note: String(formData.get("note") ?? ""),
       tags: String(formData.get("tags") ?? ""),
+      splits: amounts.map((amount, index) => ({ amount, category: categories[index] ?? "" })),
     });
   } catch (error) {
     await bail("/", error);

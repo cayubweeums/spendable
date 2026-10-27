@@ -42,6 +42,7 @@ export type Transaction = {
   note?: string;
   tags?: string[];
   cleared?: boolean;
+  splits?: { category: string; amountCents: number }[];
 };
 
 export type Category = {
@@ -131,6 +132,7 @@ export type Snapshot = {
     note: string;
     tags: string[];
     cleared: boolean;
+    splits: { category: string; amountCents: number }[];
     currency: string;
   }[];
 };
