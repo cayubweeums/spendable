@@ -308,6 +308,12 @@ function ensureColumns(database: DatabaseSync): void {
       contains_text TEXT PRIMARY KEY,
       category TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS categories (
+      name TEXT PRIMARY KEY,
+      group_name TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      hidden INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
@@ -609,6 +615,75 @@ export function deleteRule(contains: string): void {
   db().prepare("DELETE FROM rules WHERE contains_text = ?").run(contains);
 }
 
+export type StoredCategory = {
+  name: string;
+  group: string;
+  note: string;
+  hidden: boolean;
+};
+
+export function listCategories(): StoredCategory[] {
+  const database = db();
+  database.exec(`
+    INSERT INTO categories (name)
+    SELECT DISTINCT category FROM transactions
+    WHERE category IS NOT NULL AND category != ''
+    ON CONFLICT(name) DO NOTHING;
+    INSERT INTO categories (name)
+    SELECT DISTINCT category FROM rules
+    WHERE category != ''
+    ON CONFLICT(name) DO NOTHING;
+  `);
+  const rows = database
+    .prepare("SELECT name, group_name, note, hidden FROM categories ORDER BY group_name COLLATE NOCASE, name COLLATE NOCASE")
+    .all() as { name: string; group_name: string; note: string; hidden: number }[];
+  return rows.map((row) => ({
+    name: row.name,
+    group: row.group_name,
+    note: row.note,
+    hidden: row.hidden === 1,
+  }));
+}
+
+export function getCategory(name: string): StoredCategory | null {
+  return listCategories().find((category) => category.name === name) ?? null;
+}
+
+export function insertCategory(name: string): void {
+  db().prepare("INSERT INTO categories (name) VALUES (?) ON CONFLICT(name) DO NOTHING").run(name);
+}
+
+export function writeCategory(name: string, fields: { group: string; note: string; hidden: boolean }): number {
+  const result = db()
+    .prepare("UPDATE categories SET group_name = ?, note = ?, hidden = ? WHERE name = ?")
+    .run(fields.group, fields.note, fields.hidden ? 1 : 0, name);
+  return Number(result.changes ?? 0);
+}
+
+export function renameCategory(from: string, to: string): void {
+  if (from === to) return;
+  if (db().prepare("SELECT 1 AS ok FROM categories WHERE name = ?").get(to)) {
+    throw new SpendableError("That name is taken.", "bad_category");
+  }
+  const result = db().prepare("UPDATE categories SET name = ? WHERE name = ?").run(to, from);
+  if (!Number(result.changes ?? 0)) throw new SpendableError("No category with that name.", "not_found", 404);
+  db().prepare("UPDATE transactions SET category = ? WHERE category = ?").run(to, from);
+  db().prepare("UPDATE rules SET category = ? WHERE category = ?").run(to, from);
+}
+
+export function retargetCategory(from: string, into: string): void {
+  db().prepare("UPDATE transactions SET category = ? WHERE category = ?").run(into, from);
+  db().prepare("UPDATE rules SET category = ? WHERE category = ?").run(into, from);
+  db().prepare("DELETE FROM categories WHERE name = ?").run(from);
+}
+
+export function forgetCategory(name: string): number {
+  db().prepare("UPDATE transactions SET category = NULL WHERE category = ?").run(name);
+  db().prepare("DELETE FROM rules WHERE category = ?").run(name);
+  const result = db().prepare("DELETE FROM categories WHERE name = ?").run(name);
+  return Number(result.changes ?? 0);
+}
+
 export function applyCategoryRules(): number {
   const rules = listRules();
   if (rules.length === 0) return 0;
@@ -650,6 +725,7 @@ export function deactivateRecurringBill(matchText: string): void {
 
 export function setTransactionCategory(id: string, category: string | null): number {
   const result = db().prepare("UPDATE transactions SET category = ? WHERE id = ?").run(category, id);
+  if (category) db().prepare("INSERT INTO categories (name) VALUES (?) ON CONFLICT(name) DO NOTHING").run(category);
   return Number(result.changes ?? 0);
 }
 

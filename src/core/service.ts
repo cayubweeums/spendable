@@ -11,7 +11,7 @@ import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
 import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
-import type { AccountKind, PayMode, Role, Settings, Snapshot } from "./types";
+import type { AccountKind, Category, PayMode, Role, Settings, Snapshot } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export { syncIsDue, type SyncSchedule };
@@ -365,6 +365,54 @@ export function createBill(input: { name: string; amountCents: number; dueDay: n
 export function removeBill(id: string): void {
   ready();
   if (store.deleteBill(id) === 0) throw new SpendableError("No bill with that id.", "not_found", 404);
+}
+
+export function listCategories(): Category[] {
+  ready();
+  return store.listCategories();
+}
+
+export function createCategory(name: string): void {
+  ready();
+  const cleaned = sanitizeLabel(name, 40);
+  if (!cleaned) throw new SpendableError("A category needs a name.", "bad_category");
+  store.insertCategory(cleaned);
+}
+
+export function updateCategory(
+  name: string,
+  patch: { name?: string; group?: string; note?: string; hidden?: boolean },
+): void {
+  ready();
+  const current = store.getCategory(name);
+  if (!current) throw new SpendableError("No category with that name.", "not_found", 404);
+  const nextName = patch.name == null ? name : sanitizeLabel(patch.name, 40);
+  if (!nextName) throw new SpendableError("A category needs a name.", "bad_category");
+  const group = patch.group == null ? current.group : sanitizeLabel(patch.group, 40);
+  const note = patch.note == null ? current.note : sanitizeLabel(patch.note, 280);
+  const hidden = patch.hidden == null ? current.hidden : patch.hidden;
+  store.withTransaction(() => {
+    if (nextName !== name) store.renameCategory(name, nextName);
+    if (store.writeCategory(nextName, { group, note, hidden }) === 0) {
+      throw new SpendableError("No category with that name.", "not_found", 404);
+    }
+  });
+}
+
+export function mergeCategory(from: string, into: string): void {
+  ready();
+  if (from === into) throw new SpendableError("Pick another category.", "bad_category");
+  if (!store.getCategory(from) || !store.getCategory(into)) {
+    throw new SpendableError("No category with that name.", "not_found", 404);
+  }
+  store.withTransaction(() => store.retargetCategory(from, into));
+}
+
+export function removeCategory(name: string): void {
+  ready();
+  store.withTransaction(() => {
+    if (store.forgetCategory(name) === 0) throw new SpendableError("No category with that name.", "not_found", 404);
+  });
 }
 
 export function setCategory(id: string, category: string | null): void {

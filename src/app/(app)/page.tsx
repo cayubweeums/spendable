@@ -7,7 +7,7 @@ import { formatLong, formatTimestamp, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
 import { kindLabel } from "@/core/bank";
 import { matchingRule } from "@/core/rules";
-import { getSettings, getSnapshot, listBills, listRules } from "@/core/service";
+import { getSettings, getSnapshot, listBills, listCategories, listRules } from "@/core/service";
 
 export default async function HomePage({
   searchParams,
@@ -19,6 +19,9 @@ export default async function HomePage({
   const settings = getSettings();
   const rules = listRules();
   const bills = listBills();
+  const categoryNames = listCategories()
+    .filter((category) => !category.hidden)
+    .map((category) => category.name);
   const money = (cents: number) => formatMoney(cents, snapshot.currency);
   const stamps = [...snapshot.deposits.map((account) => account.balanceDate), ...snapshot.debts.map((account) => account.balanceDate)];
   const asOf = stamps.length > 0 ? Math.max(...stamps) : null;
@@ -109,6 +112,11 @@ export default async function HomePage({
 
           <section>
             <h2 className="kicker">Charges</h2>
+            <datalist id="categories">
+              {categoryNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
             <table className="ledger">
               <thead className="sr">
                 <tr>
@@ -140,7 +148,7 @@ export default async function HomePage({
                             <input type="hidden" name="id" value={txn.id} />
                             <label>
                               Category
-                              <input name="category" defaultValue={txn.category ?? ""} maxLength={40} />
+                              <input name="category" list="categories" defaultValue={txn.category ?? ""} maxLength={40} />
                             </label>
                             <label>
                               Description contains
