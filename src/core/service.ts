@@ -309,11 +309,13 @@ export function saveTransactionDetails(input: {
   billable: boolean;
   recurring: boolean;
   note?: string;
+  tags?: string;
 }): void {
   ready();
   const txn = store.getTransaction(input.id);
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
   const category = input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
+  const tags = input.tags == null ? null : parseTags(input.tags);
   const contains = normalizeContains(input.contains || txn.description);
   if (input.remember && !category) {
     throw new SpendableError("Add a category before saving that rule.", "bad_category");
@@ -331,8 +333,9 @@ export function saveTransactionDetails(input: {
     if (input.note != null && store.setTransactionNote(input.id, sanitizeLabel(input.note, 280)) === 0) {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
+    if (tags != null) store.setTransactionTags(input.id, tags);
     if (input.remember && category) {
-      store.upsertRule(contains, category);
+      store.upsertRule(contains, category, tags == null ? undefined : (tags[0] ?? ""));
       store.applyCategoryRules();
     } else if (contains) {
       store.deleteRule(contains);
@@ -466,6 +469,27 @@ export function setNote(id: string, note: string): void {
   if (store.setTransactionNote(id, sanitizeLabel(note, 280)) === 0) {
     throw new SpendableError("No transaction with that id.", "not_found", 404);
   }
+}
+
+export function setTags(id: string, tags: string): void {
+  ready();
+  if (!store.getTransaction(id)) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  store.setTransactionTags(id, parseTags(tags));
+}
+
+// shortcut: eight labels, comma-separated. The rule stores the first. A tag editor waits for the full rules.
+function parseTags(input: string): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const part of input.split(",")) {
+    const name = sanitizeLabel(part, 40);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(name);
+    if (tags.length === 8) break;
+  }
+  return tags;
 }
 
 export function updateSettings(patch: { paydayFrequency?: string; paydayAnchor?: string; bufferCents?: number }): Settings {

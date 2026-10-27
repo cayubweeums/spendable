@@ -40,6 +40,7 @@ export type Transaction = {
   pending: boolean;
   category: string | null;
   note?: string;
+  tags?: string[];
 };
 
 export type Category = {
@@ -127,6 +128,7 @@ export type Snapshot = {
     pending: boolean;
     category: string | null;
     note: string;
+    tags: string[];
     currency: string;
   }[];
 };

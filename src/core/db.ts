@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
 import { SpendableError } from "./errors";
-import { categoryFor, type CategoryRule } from "./rules";
+import { categoryFor, matchingRule, type CategoryRule } from "./rules";
 import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
 import type { PaydayFrequency } from "./dates";
 import { isSeal, openSeal, sealPlaintext, sealWithKey } from "./vault";
@@ -312,6 +312,11 @@ function ensureColumns(database: DatabaseSync): void {
       contains_text TEXT PRIMARY KEY,
       category TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS transaction_tags (
+      transaction_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      PRIMARY KEY (transaction_id, name)
+    );
     CREATE TABLE IF NOT EXISTS categories (
       name TEXT PRIMARY KEY,
       group_name TEXT NOT NULL DEFAULT '',
@@ -334,6 +339,9 @@ function ensureColumns(database: DatabaseSync): void {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS bills_match_text ON bills(match_text) WHERE match_text IS NOT NULL;
   `);
+  if (!tableColumns(database, "rules").has("tag")) {
+    database.exec("ALTER TABLE rules ADD COLUMN tag TEXT NOT NULL DEFAULT ''");
+  }
   const named = database.prepare("SELECT value FROM meta WHERE key = ?").get("kinds_named") as { value: string } | undefined;
   if (!named) {
     const rows = database.prepare("SELECT id, name, kind FROM accounts").all() as { id: string; name: string; kind: string }[];
@@ -559,6 +567,7 @@ export function deleteBill(id: string): number {
 }
 
 export function listTransactions(): Transaction[] {
+  const tags = tagMap();
   const rows = db().prepare("SELECT * FROM transactions ORDER BY posted DESC, description").all() as TransactionRow[];
   return rows.map((row) => ({
     id: row.id,
@@ -569,6 +578,7 @@ export function listTransactions(): Transaction[] {
     pending: row.pending === 1,
     category: row.category,
     note: row.note ?? "",
+    tags: tags.get(row.id) ?? [],
   }));
 }
 
@@ -615,6 +625,27 @@ function applyPayeeCategory(id: string): void {
     .run(id);
 }
 
+function tagMap(): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  const rows = db().prepare("SELECT transaction_id, name FROM transaction_tags ORDER BY name COLLATE NOCASE").all() as {
+    transaction_id: string;
+    name: string;
+  }[];
+  for (const row of rows) {
+    const names = map.get(row.transaction_id) ?? [];
+    names.push(row.name);
+    map.set(row.transaction_id, names);
+  }
+  return map;
+}
+
+export function setTransactionTags(id: string, names: string[]): void {
+  const database = db();
+  database.prepare("DELETE FROM transaction_tags WHERE transaction_id = ?").run(id);
+  const insert = database.prepare("INSERT INTO transaction_tags (transaction_id, name) VALUES (?, ?)");
+  for (const name of names) insert.run(id, name);
+}
+
 export function getTransaction(id: string): Transaction | null {
   const row = db().prepare("SELECT * FROM transactions WHERE id = ?").get(id) as TransactionRow | undefined;
   if (!row) return null;
@@ -627,24 +658,35 @@ export function getTransaction(id: string): Transaction | null {
     pending: row.pending === 1,
     category: row.category,
     note: row.note ?? "",
+    tags: tagMap().get(row.id) ?? [],
   };
 }
 
 export function listRules(): CategoryRule[] {
-  const rows = db().prepare("SELECT contains_text, category FROM rules").all() as {
+  const rows = db().prepare("SELECT contains_text, category, tag FROM rules").all() as {
     contains_text: string;
     category: string;
+    tag: string | null;
   }[];
-  return rows.map((row) => ({ contains: row.contains_text, category: row.category }));
+  return rows.map((row) => ({ contains: row.contains_text, category: row.category, tag: row.tag ?? "" }));
 }
 
-export function upsertRule(contains: string, category: string): void {
+export function upsertRule(contains: string, category: string, tag?: string): void {
+  if (tag == null) {
+    db()
+      .prepare(
+        `INSERT INTO rules (contains_text, category) VALUES (?, ?)
+         ON CONFLICT(contains_text) DO UPDATE SET category = excluded.category`,
+      )
+      .run(contains, category);
+    return;
+  }
   db()
     .prepare(
-      `INSERT INTO rules (contains_text, category) VALUES (?, ?)
-       ON CONFLICT(contains_text) DO UPDATE SET category = excluded.category`,
+      `INSERT INTO rules (contains_text, category, tag) VALUES (?, ?, ?)
+       ON CONFLICT(contains_text) DO UPDATE SET category = excluded.category, tag = excluded.tag`,
     )
-    .run(contains, category);
+    .run(contains, category, tag);
 }
 
 export function deleteRule(contains: string): void {
@@ -805,6 +847,15 @@ export function applyCategoryRules(): number {
     if (!category) continue;
     changed += Number(update.run(category, row.id).changes ?? 0);
   }
+  const untagged = db()
+    .prepare("SELECT id, description FROM transactions WHERE id NOT IN (SELECT transaction_id FROM transaction_tags)")
+    .all() as { id: string; description: string }[];
+  const insert = db().prepare("INSERT INTO transaction_tags (transaction_id, name) VALUES (?, ?) ON CONFLICT DO NOTHING");
+  for (const row of untagged) {
+    const tag = matchingRule(row.description, rules)?.tag ?? "";
+    if (!tag) continue;
+    changed += Number(insert.run(row.id, tag).changes ?? 0);
+  }
   return changed;
 }
 
@@ -884,7 +935,9 @@ export function deleteConnection(): void {
 }
 
 export function wipeFinancialRows(): void {
-  db().exec("DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;");
+  db().exec(
+    "DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
+  );
 }
 
 export function readSettings(): Settings {

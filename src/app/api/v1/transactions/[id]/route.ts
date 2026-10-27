@@ -1,6 +1,6 @@
 import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { listTransactions, setCategory, setNote } from "@/core/service";
+import { listTransactions, setCategory, setNote, setTags } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,6 +16,7 @@ export async function PATCH(request: Request, context: Context) {
     }
     setCategory(id, typeof body.category === "string" ? body.category : null);
     if (typeof body.note === "string") setNote(id, body.note);
+    if (typeof body.tags === "string") setTags(id, body.tags);
     return { transaction: listTransactions().find((txn) => txn.id === id) ?? null };
   });
 }
