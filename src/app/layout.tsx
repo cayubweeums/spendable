@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Fraunces, IBM_Plex_Mono } from "next/font/google";
+import { signOut } from "./actions";
+import { signedIn } from "./auth";
 import { AutoSync } from "@/components/auto-sync";
 import { Nav } from "@/components/nav";
+import { SubmitButton } from "@/components/submit-button";
 import { SyncForm } from "@/components/sync-form";
 import { connectionStatus, needsOnboarding, syncIsStale } from "@/core/service";
 import "./globals.css";
@@ -35,10 +38,11 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const onboarding = needsOnboarding();
-  const status = connectionStatus();
-  const stale = !onboarding && status.connected && !status.demo && syncIsStale(status.syncedAt);
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const authed = await signedIn();
+  const onboarding = authed && needsOnboarding();
+  const status = authed ? connectionStatus() : null;
+  const stale = status != null && !onboarding && status.connected && !status.demo && syncIsStale(status.syncedAt);
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
@@ -46,22 +50,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           Skip to content
         </a>
         <header className="site-header">
-          <a className="wordmark" href={onboarding ? "/onboarding" : "/"}>
+          <a className="wordmark" href={!authed ? "/login" : onboarding ? "/onboarding" : "/"}>
             spendable
           </a>
-          {onboarding ? null : <Nav />}
-          {onboarding ? null : (
+          {authed && !onboarding ? <Nav /> : null}
+          {authed ? (
             <div className="header-actions">
-              {status.demo ? <span className="kicker">Sample</span> : null}
-              {status.connected ? (
+              {onboarding || !status?.demo ? null : <span className="kicker">Sample</span>}
+              {onboarding ? null : status?.connected ? (
                 <SyncForm />
               ) : (
                 <a className="button" href="/bank">
                   Connect
                 </a>
               )}
+              <form action={signOut} className="inline">
+                <SubmitButton pending="Signing out…" quiet>
+                  Sign out
+                </SubmitButton>
+              </form>
             </div>
-          )}
+          ) : null}
         </header>
         <main id="main">
           {stale ? <AutoSync stale /> : null}

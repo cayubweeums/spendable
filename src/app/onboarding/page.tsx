@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { connectFromOnboarding, finishOnboarding, syncFromOnboarding } from "../actions";
+import { requirePage } from "../auth";
 import { AccountFields } from "@/components/account-fields";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
@@ -27,6 +28,7 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ step?: string; notice?: string }>;
 }) {
+  await requirePage();
   if (!needsOnboarding()) redirect("/");
   const query = await searchParams;
   const status = connectionStatus();

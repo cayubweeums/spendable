@@ -1,4 +1,4 @@
-import { handle, readJson } from "@/core/http";
+import { guard, readJson } from "@/core/http";
 import { getSnapshot, listAccounts, updateAccount } from "@/core/service";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: Context) {
   const { id } = await context.params;
-  return handle(async () => {
+  return guard(request, async () => {
     const body = await readJson(request);
     updateAccount(id, {
       role: typeof body.role === "string" ? body.role : undefined,

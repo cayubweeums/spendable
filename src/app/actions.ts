@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { clearSession, requirePage, writeSession } from "./auth";
 import { publicErrorMessage } from "@/core/errors";
 import {
   completeOnboarding,
@@ -11,10 +12,14 @@ import {
   createBill,
   disconnect,
   dollarsToCents,
+  establishPassword,
   listAccounts,
+  needsOnboarding,
+  passwordIsSet,
   removeBill,
   restoreDemo,
   saveTransactionDetails,
+  signIn,
   sync,
   updateAccount,
   updateSettings,
@@ -60,7 +65,28 @@ function refresh() {
   revalidatePath("/", "layout");
 }
 
+export async function openApp(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  try {
+    const token = passwordIsSet()
+      ? signIn(password)
+      : establishPassword(password, String(formData.get("confirm") ?? ""));
+    await writeSession(token);
+  } catch (error) {
+    await bail("/login", error);
+  }
+  refresh();
+  redirect(needsOnboarding() ? "/onboarding" : "/");
+}
+
+export async function signOut() {
+  await clearSession();
+  refresh();
+  redirect("/login");
+}
+
 export async function connectBank(formData: FormData) {
+  await requirePage();
   try {
     await connect(String(formData.get("token") ?? ""));
   } catch (error) {
@@ -71,6 +97,7 @@ export async function connectBank(formData: FormData) {
 }
 
 export async function syncBank() {
+  await requirePage();
   try {
     await sync();
   } catch (error) {
@@ -81,18 +108,21 @@ export async function syncBank() {
 }
 
 export async function disconnectBank() {
+  await requirePage();
   disconnect();
   refresh();
   redirect("/bank?notice=disconnected");
 }
 
 export async function loadSample() {
+  await requirePage();
   restoreDemo();
   refresh();
   redirect("/?notice=sample");
 }
 
 export async function connectFromOnboarding(formData: FormData) {
+  await requirePage();
   let connected = false;
   try {
     await connect(String(formData.get("token") ?? ""));
@@ -106,6 +136,7 @@ export async function connectFromOnboarding(formData: FormData) {
 }
 
 export async function syncFromOnboarding() {
+  await requirePage();
   try {
     await sync();
   } catch (error) {
@@ -116,6 +147,7 @@ export async function syncFromOnboarding() {
 }
 
 export async function finishOnboarding(formData: FormData) {
+  await requirePage();
   try {
     applyAccountForm(formData);
     completeOnboarding();
@@ -127,6 +159,7 @@ export async function finishOnboarding(formData: FormData) {
 }
 
 export async function saveAccounts(formData: FormData) {
+  await requirePage();
   try {
     applyAccountForm(formData);
   } catch (error) {
@@ -137,6 +170,7 @@ export async function saveAccounts(formData: FormData) {
 }
 
 export async function saveTransaction(formData: FormData) {
+  await requirePage();
   try {
     const categoryRaw = String(formData.get("category") ?? "");
     saveTransactionDetails({
@@ -155,6 +189,7 @@ export async function saveTransaction(formData: FormData) {
 }
 
 export async function addBill(formData: FormData) {
+  await requirePage();
   try {
     createBill({
       name: String(formData.get("name") ?? ""),
@@ -169,6 +204,7 @@ export async function addBill(formData: FormData) {
 }
 
 export async function deleteBill(formData: FormData) {
+  await requirePage();
   try {
     removeBill(String(formData.get("id") ?? ""));
   } catch (error) {
@@ -179,6 +215,7 @@ export async function deleteBill(formData: FormData) {
 }
 
 export async function saveSettings(formData: FormData) {
+  await requirePage();
   try {
     const bufferRaw = String(formData.get("buffer") ?? "").trim();
     updateSettings({

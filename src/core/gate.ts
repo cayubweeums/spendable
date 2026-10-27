@@ -1,0 +1,23 @@
+export function cookieValue(header: string | null, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function gateDecision(input: { pathname: string; method: string; signedIn: boolean }): "next" | "login" | "unauthorized" {
+  if (input.pathname === "/login" || input.pathname === "/icon") return "next";
+  if (input.pathname === "/api/v1/session" && input.method === "POST") return "next";
+  if (input.pathname === "/api/v1/flash" && input.method === "DELETE") return "next";
+  if (input.signedIn) return "next";
+  if (input.pathname.startsWith("/api/")) return "unauthorized";
+  return "login";
+}
