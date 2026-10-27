@@ -1,0 +1,233 @@
+import { formatMoney, isIsoCurrency } from "./money";
+import {
+  addDays,
+  diffDays,
+  dueDatesInWindow,
+  formatLong,
+  nextPayday,
+  postedToISO,
+  previousPayday,
+} from "./dates";
+import type { Account, Bill, Settings, Snapshot, Transaction } from "./types";
+
+export const PRINCIPLE =
+  "Account balances are the figures last copied from the bank. Bills, card payments, the buffer, and categories are a view on top of those figures. They never replace them.";
+
+const QUESTION = "How much can I spend right now?";
+
+type Input = Settings & {
+  today: string;
+  demo: boolean;
+  syncedAt: string | null;
+  syncErrors: string[];
+  accounts: Account[];
+  bills: Bill[];
+  transactions: Transaction[];
+};
+
+function liquidCents(account: Account, transactions: Transaction[]): number {
+  if (account.availableCents != null) return account.availableCents;
+  const pending = transactions
+    .filter((txn) => txn.accountId === account.id && txn.pending && txn.amountCents < 0)
+    .reduce((sum, txn) => sum + txn.amountCents, 0);
+  return account.balanceCents + pending;
+}
+
+function cumulativeOutflows(
+  transactions: Transaction[],
+  spendIds: Set<string>,
+  start: string,
+  days: number,
+): number[] {
+  const daily = Array.from({ length: days }, () => 0);
+  for (const txn of transactions) {
+    if (!spendIds.has(txn.accountId) || txn.pending || txn.amountCents >= 0) continue;
+    const iso = postedToISO(txn.posted);
+    if (!iso) continue;
+    const index = diffDays(start, iso);
+    if (index < 0 || index >= days) continue;
+    daily[index] += -txn.amountCents;
+  }
+  let running = 0;
+  return daily.map((value) => {
+    running += value;
+    return running;
+  });
+}
+
+export function computeSpendable(input: Input): Snapshot {
+  const next = nextPayday(input.today, input.paydayFrequency, input.paydayAnchor);
+  const previous = previousPayday(input.today, input.paydayFrequency, input.paydayAnchor);
+  const daysUntilPayday = Math.max(1, diffDays(input.today, next));
+  const cycleDays = Math.max(1, diffDays(previous, next));
+  const dayNumber = Math.min(cycleDays, diffDays(previous, input.today) + 1);
+
+  const spendAccounts = input.accounts.filter((account) => account.role === "spend");
+  const currency =
+    spendAccounts.find((account) => isIsoCurrency(account.currency))?.currency ??
+    input.accounts.find((account) => isIsoCurrency(account.currency))?.currency ??
+    "USD";
+
+  const lines: Snapshot["receipt"]["lines"] = [];
+  const subs: { when: string; line: Snapshot["receipt"]["lines"][number] }[] = [];
+  let liquid = 0;
+
+  for (const account of spendAccounts) {
+    if (account.currency !== currency) {
+      lines.push({
+        kind: "bank",
+        label: account.name,
+        detail: "Different currency, left out of the total",
+        cents: 0,
+      });
+      continue;
+    }
+    const available = liquidCents(account, input.transactions);
+    liquid += available;
+    const detail =
+      account.availableCents != null && account.availableCents !== account.balanceCents
+        ? `Available. Ledger ${formatMoney(account.balanceCents, account.currency)}`
+        : account.availableCents != null
+          ? "Reported by the bank"
+          : "Ledger balance, with pending charges taken off";
+    lines.push({
+      kind: "bank",
+      label: account.name,
+      detail,
+      cents: available,
+    });
+  }
+
+  for (const bill of input.bills.filter((item) => item.active)) {
+    const dates = dueDatesInWindow(bill.dueDay, input.today, next);
+    for (const date of dates) {
+      liquid -= bill.amountCents;
+      subs.push({
+        when: date,
+        line: {
+          kind: "sub",
+          label: bill.name,
+          detail: `Due ${formatLong(date)}`,
+          cents: -bill.amountCents,
+        },
+      });
+    }
+  }
+
+  for (const account of input.accounts.filter((item) => item.role === "credit")) {
+    if (account.currency !== currency || account.payMode === "none" || account.dueDay == null) continue;
+    const dates = dueDatesInWindow(account.dueDay, input.today, next);
+    if (dates.length === 0) continue;
+    const owed = account.balanceCents < 0 ? -account.balanceCents : 0;
+    const payment = account.payMode === "full" ? owed : Math.min(account.minimumCents, owed);
+    if (payment <= 0) continue;
+    for (const date of dates) {
+      liquid -= payment;
+      subs.push({
+        when: date,
+        line: {
+          kind: "sub",
+          label: account.payMode === "full" ? `${account.name} payment` : `${account.name} minimum`,
+          detail: `Due ${formatLong(date)}`,
+          cents: -payment,
+        },
+      });
+    }
+  }
+
+  subs.sort((a, b) => a.when.localeCompare(b.when) || a.line.label.localeCompare(b.line.label));
+  lines.push(...subs.map((item) => item.line));
+
+  if (input.bufferCents > 0) {
+    liquid -= input.bufferCents;
+    lines.push({
+      kind: "sub",
+      label: "Left untouched",
+      detail: "Your buffer",
+      cents: -input.bufferCents,
+    });
+  }
+
+  const spendableCents = liquid;
+  const spendIds = new Set(
+    spendAccounts.filter((account) => account.currency === currency).map((account) => account.id),
+  );
+  const lastStart = addDays(previous, -cycleDays);
+  const lastCycle = cumulativeOutflows(input.transactions, spendIds, lastStart, cycleDays);
+  const thisCycle = cumulativeOutflows(input.transactions, spendIds, previous, dayNumber);
+
+  const deposits = input.accounts
+    .filter(
+      (account): account is Account & { role: "spend" | "reserve" } =>
+        account.role === "spend" || account.role === "reserve",
+    )
+    .map((account) => ({
+      id: account.id,
+      name: account.name,
+      orgName: account.orgName,
+      role: account.role,
+      currency: account.currency,
+      ledgerCents: account.balanceCents,
+      availableCents: account.availableCents,
+      balanceDate: account.balanceDate,
+    }));
+
+  const debts = input.accounts
+    .filter((account) => account.role === "credit")
+    .map((account) => ({
+      id: account.id,
+      name: account.name,
+      orgName: account.orgName,
+      currency: account.currency,
+      owedCents: account.balanceCents < 0 ? -account.balanceCents : 0,
+      balanceDate: account.balanceDate,
+    }));
+
+  const names = new Map(input.accounts.map((account) => [account.id, account]));
+  const recent = [...input.transactions]
+    .sort((a, b) => b.posted - a.posted || a.description.localeCompare(b.description))
+    .slice(0, 8)
+    .map((txn) => ({
+      id: txn.id,
+      posted: postedToISO(txn.posted),
+      description: txn.description,
+      amountCents: txn.amountCents,
+      accountName: names.get(txn.accountId)?.name ?? "Account",
+      pending: txn.pending,
+      category: txn.category,
+      currency: names.get(txn.accountId)?.currency ?? currency,
+    }));
+
+  return {
+    principle: PRINCIPLE,
+    question: QUESTION,
+    today: input.today,
+    demo: input.demo,
+    currency,
+    syncedAt: input.syncedAt,
+    syncErrors: input.syncErrors,
+    nextPayday: next,
+    previousPayday: previous,
+    daysUntilPayday,
+    perDayCents: Math.trunc(spendableCents / daysUntilPayday),
+    spendableCents,
+    depositsCents: deposits
+      .filter((account) => account.currency === currency)
+      .reduce((sum, account) => sum + account.ledgerCents, 0),
+    owedCents: debts
+      .filter((account) => account.currency === currency)
+      .reduce((sum, account) => sum + account.owedCents, 0),
+    deposits,
+    debts,
+    receipt: { lines, totalCents: spendableCents },
+    pace: {
+      cycleDays,
+      dayNumber,
+      thisCycle,
+      lastCycle,
+      thisSoFarCents: thisCycle.at(-1) ?? 0,
+      lastAtSameDayCents: lastCycle[dayNumber - 1] ?? 0,
+    },
+    recent,
+  };
+}

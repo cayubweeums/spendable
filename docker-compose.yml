@@ -1,0 +1,12 @@
+services:
+  spendable:
+    build: .
+    image: spendable:local
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - spendable-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  spendable-data:

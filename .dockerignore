@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+data/*.db
+data/*.db-*
+.git
+.github
+test
+scripts
+*.md
+.env
+.env.*
+tsconfig.tsbuildinfo
+next-env.d.ts
+Dockerfile
+docker-compose.yml
+.dockerignore
