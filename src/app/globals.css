@@ -381,7 +381,7 @@ table.ledger .out { color: var(--debit); }
 
 table.ledger.edit { table-layout: auto; min-width: 42rem; }
 
-table.ledger.edit.wide { min-width: 64rem; }
+table.ledger.edit.wide { min-width: 72rem; }
 
 .ledger-scroll { overflow-x: auto; }
 

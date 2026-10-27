@@ -143,6 +143,7 @@ export default async function HomePage({
                           {txn.category ? ` · ${txn.category}` : null}
                           {txn.note ? ` · ${txn.note}` : null}
                           {txn.tags.length ? ` · ${txn.tags.join(", ")}` : null}
+                          {txn.cleared ? " · cleared" : null}
                           {bill ? " · monthly" : null}
                         </span>
                         <details className="txn-more" suppressHydrationWarning>

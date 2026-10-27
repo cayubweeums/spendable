@@ -37,6 +37,7 @@ import {
   updatePayee,
   updateSettings,
 } from "@/core/service";
+import { ruleSource } from "@/core/rules";
 
 async function bail(path: string, error: unknown): Promise<never> {
   const jar = await cookies();
@@ -328,13 +329,25 @@ export async function deleteBill(formData: FormData) {
   redirect("/bills?notice=saved");
 }
 
+function ruleToValue(action: string, from: string, to: string): string {
+  const token = `{{${from}}}`;
+  if (
+    ruleSource(token) &&
+    (action === "notes" || action === "date" || action === "amount" || action === "payee" || action === "cleared")
+  ) {
+    return token;
+  }
+  return to;
+}
+
 export async function saveRules(formData: FormData) {
   await requirePage();
   try {
     const ids = formData.getAll("id").map(String);
     const rules = ids.flatMap((id, index) => {
       const value = String(formData.getAll("value")[index] ?? "");
-      const actionValue = String(formData.getAll("to")[index] ?? "");
+      const action = String(formData.getAll("action")[index] ?? "");
+      const actionValue = ruleToValue(action, String(formData.getAll("from")[index] ?? ""), String(formData.getAll("to")[index] ?? ""));
       if (!value.trim() || !actionValue.trim()) return [];
       return [
         {
@@ -344,13 +357,14 @@ export async function saveRules(formData: FormData) {
           field: String(formData.getAll("field")[index] ?? ""),
           op: String(formData.getAll("op")[index] ?? ""),
           value,
-          action: String(formData.getAll("action")[index] ?? ""),
+          action,
           actionValue,
         },
       ];
     });
     const addValue = String(formData.get("add-value") ?? "");
-    const addTo = String(formData.get("add-to") ?? "");
+    const addAction = String(formData.get("add-action") ?? "");
+    const addTo = ruleToValue(addAction, String(formData.get("add-from") ?? ""), String(formData.get("add-to") ?? ""));
     if (addValue.trim() && addTo.trim()) {
       rules.push({
         id: "",
@@ -359,7 +373,7 @@ export async function saveRules(formData: FormData) {
         field: String(formData.get("add-field") ?? ""),
         op: String(formData.get("add-op") ?? ""),
         value: addValue,
-        action: String(formData.get("add-action") ?? ""),
+        action: addAction,
         actionValue: addTo,
       });
     }

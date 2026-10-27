@@ -5,8 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
 import { SpendableError } from "./errors";
-import { postedToISO, type PaydayFrequency } from "./dates";
-import { categoryFor, matchingRule, ruleMatches, type CategoryRule, type MatchRule, type RuleStage } from "./rules";
+import { isISODate, isoToLocalNoonUnix, postedToISO, type PaydayFrequency } from "./dates";
+import { decimalToCents } from "./money";
+import { categoryFor, clearedFlag, fillRuleValue, matchingRule, ruleMatches, ruleSource, type CategoryRule, type MatchRule, type RuleStage } from "./rules";
+import { sanitizeLabel } from "./sanitize";
 import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
 import { isSeal, openSeal, sealPlaintext, sealWithKey } from "./vault";
 
@@ -46,6 +48,7 @@ type TransactionRow = {
   pending: number;
   category: string | null;
   note?: string;
+  cleared?: number;
 };
 
 type ConnectionRow = {
@@ -303,6 +306,9 @@ function ensureColumns(database: DatabaseSync): void {
   }
   if (!tableColumns(database, "transactions").has("note")) {
     database.exec("ALTER TABLE transactions ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
+  if (!tableColumns(database, "transactions").has("cleared")) {
+    database.exec("ALTER TABLE transactions ADD COLUMN cleared INTEGER NOT NULL DEFAULT 0");
   }
   if (!tableColumns(database, "bills").has("match_text")) {
     database.exec("ALTER TABLE bills ADD COLUMN match_text TEXT");
@@ -589,6 +595,7 @@ export function listTransactions(): Transaction[] {
     category: row.category,
     note: row.note ?? "",
     tags: tags.get(row.id) ?? [],
+    cleared: row.cleared === 1,
   }));
 }
 
@@ -671,6 +678,7 @@ export function getTransaction(id: string): Transaction | null {
     category: row.category,
     note: row.note ?? "",
     tags: tagMap().get(row.id) ?? [],
+    cleared: row.cleared === 1,
   };
 }
 
@@ -952,6 +960,7 @@ type RuleFactRow = {
   note: string | null;
   posted: number;
   amount_cents: number;
+  cleared: number;
   account_label: string | null;
   account_name: string | null;
   payee: string | null;
@@ -960,7 +969,7 @@ type RuleFactRow = {
 function loadRuleFacts(onlyId?: string): RuleFactRow[] {
   return db()
     .prepare(
-      `SELECT t.id, t.description, t.category, t.note, t.posted, t.amount_cents,
+      `SELECT t.id, t.description, t.category, t.note, t.posted, t.amount_cents, t.cleared,
               a.label AS account_label, a.name AS account_name, k.name AS payee
        FROM transactions t
        LEFT JOIN accounts a ON a.id = t.account_id
@@ -970,7 +979,7 @@ function loadRuleFacts(onlyId?: string): RuleFactRow[] {
     .all(...(onlyId ? [onlyId] : [])) as RuleFactRow[];
 }
 
-// shortcut: a rule fills an empty category, note, or tag. A payee changes only while its name is still the bank text.
+// shortcut: a rule fills an empty category, note, or tag. Date, amount, and cleared replace the charge. A payee changes only while its name is still the bank text. Amount does not change the account balance.
 function setRulePayee(description: string, next: string): number {
   if (!description || description === next) return 0;
   const key = db().prepare("SELECT name FROM payee_keys WHERE description = ?").get(description) as { name: string } | undefined;
@@ -1008,6 +1017,7 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
     date: postedToISO(row.posted) ?? "",
     amountCents: row.amount_cents,
     tags: tags.get(row.id) ?? [],
+    cleared: row.cleared === 1,
   }));
   let changed = 0;
   for (const rule of rules) {
@@ -1021,8 +1031,10 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
       }
       if (rule.action === "notes") {
         if (fact.notes) continue;
-        changed += setTransactionNote(fact.id, rule.actionValue);
-        fact.notes = rule.actionValue;
+        const note = sanitizeLabel(fillRuleValue(rule.actionValue, fact), 280);
+        if (!note) continue;
+        changed += setTransactionNote(fact.id, note);
+        fact.notes = note;
         continue;
       }
       if (rule.action === "tag") {
@@ -1035,8 +1047,40 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
         changed += count;
         continue;
       }
-      if (setRulePayee(fact.description, rule.actionValue)) {
-        fact.payee = rule.actionValue;
+      if (rule.action === "date") {
+        const next = fillRuleValue(rule.actionValue, fact).trim();
+        if (!isISODate(next) || next === fact.date) continue;
+        db().prepare("UPDATE transactions SET posted = ? WHERE id = ?").run(isoToLocalNoonUnix(next), fact.id);
+        fact.date = next;
+        changed += 1;
+        continue;
+      }
+      if (rule.action === "amount") {
+        let cents = fact.amountCents;
+        if (ruleSource(rule.actionValue) !== "amount") {
+          try {
+            cents = decimalToCents(fillRuleValue(rule.actionValue, fact));
+          } catch {
+            continue;
+          }
+        }
+        if (cents === fact.amountCents) continue;
+        db().prepare("UPDATE transactions SET amount_cents = ? WHERE id = ?").run(cents, fact.id);
+        fact.amountCents = cents;
+        changed += 1;
+        continue;
+      }
+      if (rule.action === "cleared") {
+        const flag = clearedFlag(fillRuleValue(rule.actionValue, fact));
+        if (flag === null || flag === fact.cleared) continue;
+        db().prepare("UPDATE transactions SET cleared = ? WHERE id = ?").run(flag ? 1 : 0, fact.id);
+        fact.cleared = flag;
+        changed += 1;
+        continue;
+      }
+      const payee = sanitizeLabel(fillRuleValue(rule.actionValue, fact), 180);
+      if (payee && setRulePayee(fact.description, payee)) {
+        fact.payee = payee;
         changed += 1;
       }
     }

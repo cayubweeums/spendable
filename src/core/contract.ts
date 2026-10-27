@@ -22,7 +22,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/payees", purpose: "Payees, the bank text they match, which are favorites, and the default category." },
     { method: "PATCH", path: "/api/v1/payees/:name", purpose: "Rename a payee, mark it favorite, set its default category, or merge it into another. Does not change the bank text or a balance." },
     { method: "GET", path: "/api/v1/rules", purpose: "Rules in the order they run, and whether saving a category learns a rule." },
-    { method: "PUT", path: "/api/v1/rules", purpose: "Replace the rules and run them. Body learn turns that on or off. Does not change a balance or the bank text." },
+    { method: "PUT", path: "/api/v1/rules", purpose: "Replace the rules and run them. Notes, date, amount, payee, or cleared can be copied from the charge. Body learn turns learning on or off. Does not change a balance or the bank text." },
     { method: "DELETE", path: "/api/v1/rules/:id", purpose: "Delete a rule. Leaves what it already wrote. Does not change a balance." },
     { method: "GET", path: "/api/v1/settings", purpose: "Payday and buffer." },
     { method: "PATCH", path: "/api/v1/settings", purpose: "Update payday frequency, anchor date, and bufferCents." },
