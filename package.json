@@ -6,7 +6,7 @@
     "dev": "next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 3000",
-    "test": "node --import tsx --test --test-reporter=./scripts/verbose-reporter.mjs --test-reporter-destination=stdout test/",
+    "test": "node --import tsx --test --test-reporter=./scripts/verbose-reporter.mjs --test-reporter-destination=stdout test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
