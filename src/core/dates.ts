@@ -40,6 +40,11 @@ export function formatLong(iso: string): string {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+export function ordinal(day: number): string {
+  const tail = day % 100 >= 11 && day % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][day % 10] ?? "th";
+  return `${day}${tail}`;
+}
+
 export function formatTimestamp(unix: number): string {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",

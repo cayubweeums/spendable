@@ -1,33 +1,30 @@
-import { connectBank, disconnectBank, loadSample } from "../actions";
-import { Flash } from "@/components/flash";
+import { connectBank, disconnectBank, loadSample } from "../../actions";
+import { PendingNote } from "@/components/pending-note";
+import { ReadFlash } from "@/components/read-flash";
+import { SubmitButton } from "@/components/submit-button";
 import { connectionStatus } from "@/core/service";
 
 export default async function BankPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ notice?: string }>;
 }) {
   const query = await searchParams;
   const status = connectionStatus();
   return (
     <>
-      <Flash error={query.error} notice={query.notice} />
+      <ReadFlash notice={query.notice} />
       <h1 className="question">Bank</h1>
       <div className="page-intro stack">
+        <p>SimpleFIN copies balances. Your bank password stays with them. A token works once.</p>
         <p>
-          SimpleFIN gives this app a read-only copy of your balances and transactions. Your bank password stays with them.
-        </p>
-        <p>
-          <a href="https://bridge.simplefin.org/simplefin/create" target="_blank" rel="noreferrer">
-            Create a setup token
-          </a>
-          , paste it below, and the sample numbers are replaced. To rehearse with a fake bank first, use a demo token from the{" "}
+          Under Apps, choose New Connection, then Create Setup Token. A demo token is on the{" "}
           <a href="https://beta-bridge.simplefin.org/info/developers" target="_blank" rel="noreferrer">
-            SimpleFIN developer page
+            developer page
           </a>
-          . A token works once.
+          .
         </p>
-        <p>Sync when you want a fresh copy. SimpleFIN asks apps to stay around 24 account requests a day, and 90 days of history at a time.</p>
+        <p>Sync in the header. After 12 hours, opening the app copies again.</p>
       </div>
       {status.connected ? (
         <p>
@@ -48,7 +45,8 @@ export default async function BankPage({
           Setup token
           <textarea name="token" required spellCheck={false} autoComplete="off" />
         </label>
-        <button type="submit">Connect</button>
+        <PendingNote>Claiming the token and copying accounts.</PendingNote>
+        <SubmitButton pending="Claiming the token…">Connect</SubmitButton>
       </form>
       <div className="section row">
         {status.connected ? (

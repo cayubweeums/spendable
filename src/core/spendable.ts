@@ -1,3 +1,4 @@
+import { kindFromRole } from "./bank";
 import { formatMoney, isIsoCurrency } from "./money";
 import {
   addDays,
@@ -55,17 +56,32 @@ function cumulativeOutflows(
   });
 }
 
+function billAlreadyRecorded(bill: Bill, transactions: Transaction[], previous: string, today: string): boolean {
+  const needle = bill.matchText?.trim().toLowerCase();
+  if (!needle) return false;
+  return transactions.some((txn) => {
+    if (txn.amountCents >= 0) return false;
+    if (!txn.description.toLowerCase().includes(needle)) return false;
+    if (txn.pending) return true;
+    const iso = postedToISO(txn.posted);
+    return iso != null && iso >= previous && iso <= today;
+  });
+}
+
 export function computeSpendable(input: Input): Snapshot {
+  const accounts = input.accounts.filter((account) => account.tracked !== false);
+  const trackedIds = new Set(accounts.map((account) => account.id));
+  const transactions = input.transactions.filter((txn) => trackedIds.has(txn.accountId));
   const next = nextPayday(input.today, input.paydayFrequency, input.paydayAnchor);
   const previous = previousPayday(input.today, input.paydayFrequency, input.paydayAnchor);
   const daysUntilPayday = Math.max(1, diffDays(input.today, next));
   const cycleDays = Math.max(1, diffDays(previous, next));
   const dayNumber = Math.min(cycleDays, diffDays(previous, input.today) + 1);
 
-  const spendAccounts = input.accounts.filter((account) => account.role === "spend");
+  const spendAccounts = accounts.filter((account) => account.role === "spend");
   const currency =
     spendAccounts.find((account) => isIsoCurrency(account.currency))?.currency ??
-    input.accounts.find((account) => isIsoCurrency(account.currency))?.currency ??
+    accounts.find((account) => isIsoCurrency(account.currency))?.currency ??
     "USD";
 
   const lines: Snapshot["receipt"]["lines"] = [];
@@ -82,7 +98,7 @@ export function computeSpendable(input: Input): Snapshot {
       });
       continue;
     }
-    const available = liquidCents(account, input.transactions);
+    const available = liquidCents(account, transactions);
     liquid += available;
     const detail =
       account.availableCents != null && account.availableCents !== account.balanceCents
@@ -99,6 +115,7 @@ export function computeSpendable(input: Input): Snapshot {
   }
 
   for (const bill of input.bills.filter((item) => item.active)) {
+    if (billAlreadyRecorded(bill, transactions, previous, input.today)) continue;
     const dates = dueDatesInWindow(bill.dueDay, input.today, next);
     for (const date of dates) {
       liquid -= bill.amountCents;
@@ -109,12 +126,13 @@ export function computeSpendable(input: Input): Snapshot {
           label: bill.name,
           detail: `Due ${formatLong(date)}`,
           cents: -bill.amountCents,
+          when: date,
         },
       });
     }
   }
 
-  for (const account of input.accounts.filter((item) => item.role === "credit")) {
+  for (const account of accounts.filter((item) => item.role === "credit")) {
     if (account.currency !== currency || account.payMode === "none" || account.dueDay == null) continue;
     const dates = dueDatesInWindow(account.dueDay, input.today, next);
     if (dates.length === 0) continue;
@@ -130,6 +148,7 @@ export function computeSpendable(input: Input): Snapshot {
           label: account.payMode === "full" ? `${account.name} payment` : `${account.name} minimum`,
           detail: `Due ${formatLong(date)}`,
           cents: -payment,
+          when: date,
         },
       });
     }
@@ -153,10 +172,10 @@ export function computeSpendable(input: Input): Snapshot {
     spendAccounts.filter((account) => account.currency === currency).map((account) => account.id),
   );
   const lastStart = addDays(previous, -cycleDays);
-  const lastCycle = cumulativeOutflows(input.transactions, spendIds, lastStart, cycleDays);
-  const thisCycle = cumulativeOutflows(input.transactions, spendIds, previous, dayNumber);
+  const lastCycle = cumulativeOutflows(transactions, spendIds, lastStart, cycleDays);
+  const thisCycle = cumulativeOutflows(transactions, spendIds, previous, dayNumber);
 
-  const deposits = input.accounts
+  const deposits = accounts
     .filter(
       (account): account is Account & { role: "spend" | "reserve" } =>
         account.role === "spend" || account.role === "reserve",
@@ -166,13 +185,14 @@ export function computeSpendable(input: Input): Snapshot {
       name: account.name,
       orgName: account.orgName,
       role: account.role,
+      kind: account.kind ?? kindFromRole(account.role),
       currency: account.currency,
       ledgerCents: account.balanceCents,
       availableCents: account.availableCents,
       balanceDate: account.balanceDate,
     }));
 
-  const debts = input.accounts
+  const debts = accounts
     .filter((account) => account.role === "credit")
     .map((account) => ({
       id: account.id,
@@ -183,10 +203,10 @@ export function computeSpendable(input: Input): Snapshot {
       balanceDate: account.balanceDate,
     }));
 
-  const names = new Map(input.accounts.map((account) => [account.id, account]));
-  const recent = [...input.transactions]
+  const names = new Map(accounts.map((account) => [account.id, account]));
+  const recent = [...transactions]
     .sort((a, b) => b.posted - a.posted || a.description.localeCompare(b.description))
-    .slice(0, 8)
+    .slice(0, 15)
     .map((txn) => ({
       id: txn.id,
       posted: postedToISO(txn.posted),

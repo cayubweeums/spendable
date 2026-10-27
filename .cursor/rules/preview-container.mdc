@@ -1,0 +1,21 @@
+---
+description: Rebuild the local container before looking at a UI change
+alwaysApply: true
+---
+
+# Look at a fresh container
+
+`npm run dev` and `ghcr.io/cayubweeums/spendable:latest` are not the check. The latest tag is the last published image. It does not include the working tree.
+
+Before opening the app to judge a change:
+
+1. Stop whatever is listening on 127.0.0.1:3000.
+2. Rebuild and start from this directory:
+
+```bash
+docker compose -f docker-compose.preview.yml up -d --build
+```
+
+3. Open http://127.0.0.1:3000 and use the screen that changed. A status code is not enough.
+
+`docker-compose.yml` still pulls the registry image. The preview file builds `spendable:preview` and stores its database in the `spendable-preview` volume, not in `data/`. Do not tag that build as `ghcr.io/cayubweeums/spendable:latest`. The database, tokens, and access URL stay out of the image.

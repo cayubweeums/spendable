@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Atkinson_Hyperlegible, Fraunces, IBM_Plex_Mono } from "next/font/google";
-import { syncBank } from "./actions";
+import { AutoSync } from "@/components/auto-sync";
 import { Nav } from "@/components/nav";
-import { connectionStatus } from "@/core/service";
+import { SyncForm } from "@/components/sync-form";
+import { connectionStatus, needsOnboarding, syncIsStale } from "@/core/service";
 import "./globals.css";
 
 const display = Fraunces({
@@ -35,7 +36,9 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const onboarding = needsOnboarding();
   const status = connectionStatus();
+  const stale = !onboarding && status.connected && !status.demo && syncIsStale(status.syncedAt);
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
@@ -43,24 +46,27 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           Skip to content
         </a>
         <header className="site-header">
-          <a className="wordmark" href="/">
+          <a className="wordmark" href={onboarding ? "/onboarding" : "/"}>
             spendable
           </a>
-          <Nav />
-          <div className="header-actions">
-            {status.demo ? <span className="kicker">Sample</span> : null}
-            {status.connected ? (
-              <form action={syncBank}>
-                <button type="submit">Sync bank</button>
-              </form>
-            ) : (
-              <a className="button" href="/bank">
-                Connect
-              </a>
-            )}
-          </div>
+          {onboarding ? null : <Nav />}
+          {onboarding ? null : (
+            <div className="header-actions">
+              {status.demo ? <span className="kicker">Sample</span> : null}
+              {status.connected ? (
+                <SyncForm />
+              ) : (
+                <a className="button" href="/bank">
+                  Connect
+                </a>
+              )}
+            </div>
+          )}
         </header>
-        <main id="main">{children}</main>
+        <main id="main">
+          {stale ? <AutoSync stale /> : null}
+          {children}
+        </main>
       </body>
     </html>
   );

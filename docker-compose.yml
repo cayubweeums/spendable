@@ -1,7 +1,6 @@
 services:
   spendable:
-    build: .
-    image: spendable:local
+    image: ghcr.io/cayubweeums/spendable:latest
     ports:
       - "127.0.0.1:3000:3000"
     volumes:

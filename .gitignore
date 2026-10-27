@@ -5,6 +5,14 @@ out
 next-env.d.ts
 data/*.db
 data/*.db-*
+*.db-wal
+*.db-shm
 .env
 .env.*
 !.env.example
+*.token
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json

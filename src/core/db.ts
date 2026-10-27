@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
-import type { Account, Bill, PayMode, Role, Settings, Transaction } from "./types";
+import { categoryFor, type CategoryRule } from "./rules";
+import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
 import type { PaydayFrequency } from "./dates";
 
 type AccountRow = {
@@ -17,6 +20,8 @@ type AccountRow = {
   due_day: number | null;
   pay_mode: PayMode;
   minimum_cents: number;
+  kind?: string;
+  tracked?: number;
 };
 
 type BillRow = {
@@ -25,6 +30,7 @@ type BillRow = {
   amount_cents: number;
   due_day: number;
   active: number;
+  match_text?: string | null;
 };
 
 type TransactionRow = {
@@ -104,7 +110,56 @@ export function db(): DatabaseSync {
     `);
     globalForDb.spendableDb = database;
   }
+  ensureColumns(globalForDb.spendableDb);
   return globalForDb.spendableDb;
+}
+
+function tableColumns(database: DatabaseSync, table: string): Set<string> {
+  const rows = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  return new Set(rows.map((row) => row.name));
+}
+
+function ensureColumns(database: DatabaseSync): void {
+  const accounts = tableColumns(database, "accounts");
+  if (!accounts.has("kind")) {
+    database.exec("ALTER TABLE accounts ADD COLUMN kind TEXT NOT NULL DEFAULT 'checking'");
+    database.exec(`UPDATE accounts SET kind = CASE role
+      WHEN 'reserve' THEN 'savings'
+      WHEN 'credit' THEN 'credit'
+      WHEN 'ignore' THEN 'other'
+      ELSE 'checking' END`);
+  }
+  if (!accounts.has("tracked")) {
+    database.exec("ALTER TABLE accounts ADD COLUMN tracked INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!tableColumns(database, "bills").has("match_text")) {
+    database.exec("ALTER TABLE bills ADD COLUMN match_text TEXT");
+  }
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS rules (
+      contains_text TEXT PRIMARY KEY,
+      category TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS bills_match_text ON bills(match_text) WHERE match_text IS NOT NULL;
+  `);
+  const named = database.prepare("SELECT value FROM meta WHERE key = ?").get("kinds_named") as { value: string } | undefined;
+  if (!named) {
+    const rows = database.prepare("SELECT id, name, kind FROM accounts").all() as { id: string; name: string; kind: string }[];
+    const update = database.prepare("UPDATE accounts SET kind = ?, role = ? WHERE id = ? AND kind = 'other'");
+    for (const row of rows) {
+      if (row.kind !== "other") continue;
+      const kind = inferKind(row.name);
+      if (kind === "other" || kind === "checking") continue;
+      update.run(kind, roleForKind(kind), row.id);
+    }
+    database
+      .prepare("INSERT INTO meta (key, value) VALUES ('kinds_named', '1') ON CONFLICT(key) DO UPDATE SET value = '1'")
+      .run();
+  }
+}
+
+function storedKind(account: Account): AccountKind {
+  return account.kind && isAccountKind(account.kind) ? account.kind : kindFromRole(account.role);
 }
 
 export function closeDb(): void {
@@ -155,6 +210,8 @@ function mapAccount(row: AccountRow): Account {
     dueDay: row.due_day,
     payMode: row.pay_mode,
     minimumCents: row.minimum_cents,
+    kind: isAccountKind(row.kind) ? row.kind : kindFromRole(row.role),
+    tracked: row.tracked == null ? true : row.tracked === 1,
   };
 }
 
@@ -173,8 +230,8 @@ export function insertAccount(account: Account): void {
     .prepare(
       `INSERT INTO accounts (
         id, name, org_name, currency, balance_cents, available_cents, balance_date,
-        role, due_day, pay_mode, minimum_cents
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        role, due_day, pay_mode, minimum_cents, kind, tracked
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       account.id,
@@ -188,11 +245,12 @@ export function insertAccount(account: Account): void {
       account.dueDay,
       account.payMode,
       account.minimumCents,
+      storedKind(account),
+      account.tracked === false ? 0 : 1,
     );
 }
 
-// Bank sync is the only writer of balance_cents, available_cents, and balance_date
-// on an existing account. Role and payment rules are left as the user set them.
+// Sync writes balances only. Role, type, and card rules stay.
 export function upsertSyncedAccount(
   account: Omit<Account, "role" | "dueDay" | "payMode" | "minimumCents"> & {
     role: Role;
@@ -205,8 +263,8 @@ export function upsertSyncedAccount(
     .prepare(
       `INSERT INTO accounts (
         id, name, org_name, currency, balance_cents, available_cents, balance_date,
-        role, due_day, pay_mode, minimum_cents
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        role, due_day, pay_mode, minimum_cents, kind, tracked
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         org_name = excluded.org_name,
@@ -227,16 +285,27 @@ export function upsertSyncedAccount(
       account.dueDay,
       account.payMode,
       account.minimumCents,
+      storedKind(account),
+      account.tracked === false ? 0 : 1,
     );
 }
 
 export function updateAccountRules(
   id: string,
-  rules: { role: Role; dueDay: number | null; payMode: PayMode; minimumCents: number },
+  rules: {
+    role: Role;
+    kind: AccountKind;
+    tracked: boolean;
+    dueDay: number | null;
+    payMode: PayMode;
+    minimumCents: number;
+  },
 ): number {
   const result = db()
-    .prepare("UPDATE accounts SET role = ?, due_day = ?, pay_mode = ?, minimum_cents = ? WHERE id = ?")
-    .run(rules.role, rules.dueDay, rules.payMode, rules.minimumCents, id);
+    .prepare(
+      "UPDATE accounts SET role = ?, kind = ?, tracked = ?, due_day = ?, pay_mode = ?, minimum_cents = ? WHERE id = ?",
+    )
+    .run(rules.role, rules.kind, rules.tracked ? 1 : 0, rules.dueDay, rules.payMode, rules.minimumCents, id);
   return Number(result.changes ?? 0);
 }
 
@@ -248,13 +317,14 @@ export function listBills(): Bill[] {
     amountCents: row.amount_cents,
     dueDay: row.due_day,
     active: row.active === 1,
+    matchText: row.match_text ?? null,
   }));
 }
 
 export function insertBill(bill: Bill): void {
   db()
-    .prepare("INSERT INTO bills (id, name, amount_cents, due_day, active) VALUES (?, ?, ?, ?, ?)")
-    .run(bill.id, bill.name, bill.amountCents, bill.dueDay, bill.active ? 1 : 0);
+    .prepare("INSERT INTO bills (id, name, amount_cents, due_day, active, match_text) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(bill.id, bill.name, bill.amountCents, bill.dueDay, bill.active ? 1 : 0, bill.matchText ?? null);
 }
 
 export function deleteBill(id: string): number {
@@ -296,6 +366,80 @@ export function upsertSyncedTransaction(txn: Omit<Transaction, "category">): voi
          pending = excluded.pending`,
     )
     .run(txn.id, txn.accountId, txn.posted, txn.amountCents, txn.description, txn.pending ? 1 : 0);
+}
+
+export function getTransaction(id: string): Transaction | null {
+  const row = db().prepare("SELECT * FROM transactions WHERE id = ?").get(id) as TransactionRow | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    posted: row.posted,
+    amountCents: row.amount_cents,
+    description: row.description,
+    pending: row.pending === 1,
+    category: row.category,
+  };
+}
+
+export function listRules(): CategoryRule[] {
+  const rows = db().prepare("SELECT contains_text, category FROM rules").all() as {
+    contains_text: string;
+    category: string;
+  }[];
+  return rows.map((row) => ({ contains: row.contains_text, category: row.category }));
+}
+
+export function upsertRule(contains: string, category: string): void {
+  db()
+    .prepare(
+      `INSERT INTO rules (contains_text, category) VALUES (?, ?)
+       ON CONFLICT(contains_text) DO UPDATE SET category = excluded.category`,
+    )
+    .run(contains, category);
+}
+
+export function deleteRule(contains: string): void {
+  db().prepare("DELETE FROM rules WHERE contains_text = ?").run(contains);
+}
+
+export function applyCategoryRules(): number {
+  const rules = listRules();
+  if (rules.length === 0) return 0;
+  const rows = db().prepare("SELECT id, description FROM transactions WHERE category IS NULL").all() as {
+    id: string;
+    description: string;
+  }[];
+  const update = db().prepare("UPDATE transactions SET category = ? WHERE id = ? AND category IS NULL");
+  let changed = 0;
+  for (const row of rows) {
+    const category = categoryFor(row.description, rules);
+    if (!category) continue;
+    changed += Number(update.run(category, row.id).changes ?? 0);
+  }
+  return changed;
+}
+
+export function upsertRecurringBill(bill: {
+  matchText: string;
+  name: string;
+  amountCents: number;
+  dueDay: number;
+}): void {
+  const existing = db().prepare("SELECT id FROM bills WHERE match_text = ?").get(bill.matchText) as { id: string } | undefined;
+  if (existing) {
+    db()
+      .prepare("UPDATE bills SET name = ?, amount_cents = ?, due_day = ?, active = 1 WHERE id = ?")
+      .run(bill.name, bill.amountCents, bill.dueDay, existing.id);
+    return;
+  }
+  db()
+    .prepare("INSERT INTO bills (id, name, amount_cents, due_day, active, match_text) VALUES (?, ?, ?, ?, 1, ?)")
+    .run(randomUUID(), bill.name, bill.amountCents, bill.dueDay, bill.matchText);
+}
+
+export function deactivateRecurringBill(matchText: string): void {
+  db().prepare("UPDATE bills SET active = 0 WHERE match_text = ?").run(matchText);
 }
 
 export function setTransactionCategory(id: string, category: string | null): number {
@@ -346,7 +490,7 @@ export function deleteConnection(): void {
 }
 
 export function wipeFinancialRows(): void {
-  db().exec("DELETE FROM transactions; DELETE FROM bills; DELETE FROM accounts; DELETE FROM connection;");
+  db().exec("DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;");
 }
 
 export function readSettings(): Settings {

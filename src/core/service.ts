@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { mergeBankAccount } from "./bank";
+import { inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
 import { isISODate, localISODate, postedToISO, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { decimalToCents } from "./money";
+import { normalizeContains, type CategoryRule } from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
-import type { PayMode, Role, Settings, Snapshot } from "./types";
+import type { AccountKind, PayMode, Role, Settings, Snapshot } from "./types";
+
+export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 const ROLES: Role[] = ["spend", "reserve", "credit", "ignore"];
 const PAY_MODES: PayMode[] = ["full", "minimum", "none"];
@@ -68,6 +71,25 @@ export function getSettings(): Settings {
   return store.readSettings();
 }
 
+export function needsOnboarding(): boolean {
+  ready();
+  return store.getMeta("onboarded") !== "1";
+}
+
+export function completeOnboarding(): void {
+  ready();
+  if (!store.getConnection()) {
+    throw new SpendableError("Connect SimpleFIN before leaving setup.", "not_connected");
+  }
+  if (store.listAccounts().length === 0) {
+    throw new SpendableError(
+      "SimpleFIN did not return an account. Add a bank there, then sync again.",
+      "no_accounts",
+    );
+  }
+  store.setMeta("onboarded", "1");
+}
+
 export function connectionStatus() {
   ready();
   const connection = store.getConnection();
@@ -80,9 +102,26 @@ export function connectionStatus() {
   };
 }
 
+export function syncIsStale(syncedAt: string | null, now = Date.now()): boolean {
+  if (!syncedAt) return true;
+  const then = Date.parse(syncedAt);
+  if (!Number.isFinite(then)) return true;
+  return now - then >= SYNC_INTERVAL_MS;
+}
+
+export function listRules(): CategoryRule[] {
+  ready();
+  return store.listRules();
+}
+
 function assertRole(role: string): Role {
   if (!ROLES.includes(role as Role)) throw new SpendableError("Unknown account role.", "bad_role");
   return role as Role;
+}
+
+function assertKind(kind: string): AccountKind {
+  if (!isAccountKind(kind)) throw new SpendableError("Unknown account type.", "bad_kind");
+  return kind;
 }
 
 function assertPayMode(mode: string): PayMode {
@@ -107,19 +146,89 @@ function assertCents(value: number, label: string, allowZero = false): number {
 
 export function updateAccount(
   id: string,
-  patch: { role?: string; dueDay?: number | null; payMode?: string; minimumCents?: number },
+  patch: {
+    role?: string;
+    kind?: string;
+    tracked?: boolean;
+    dueDay?: number | null;
+    payMode?: string;
+    minimumCents?: number;
+  },
 ): void {
   ready();
   const current = store.getAccount(id);
   if (!current) throw new SpendableError("No account with that id.", "not_found", 404);
+  let role = current.role;
+  let kind = current.kind ?? kindFromRole(current.role);
+  if (patch.kind != null) {
+    kind = assertKind(patch.kind);
+    role = roleForKind(kind);
+  } else if (patch.role != null) {
+    role = assertRole(patch.role);
+    kind = kindFromRole(role);
+  }
   const next = {
-    role: patch.role == null ? current.role : assertRole(patch.role),
+    role,
+    kind,
+    tracked: patch.tracked == null ? current.tracked !== false : patch.tracked,
     dueDay: patch.dueDay === undefined ? current.dueDay : assertDueDay(patch.dueDay),
     payMode: patch.payMode == null ? current.payMode : assertPayMode(patch.payMode),
     minimumCents:
       patch.minimumCents == null ? current.minimumCents : assertCents(patch.minimumCents, "Minimum payment", true),
   };
   store.updateAccountRules(id, next);
+}
+
+function dueDayFromPosted(posted: number): number {
+  const iso = posted > 0 ? postedToISO(posted) : null;
+  const day = Number((iso ?? localISODate()).slice(8, 10));
+  return Number.isInteger(day) && day >= 1 && day <= 31 ? day : 1;
+}
+
+export function saveTransactionDetails(input: {
+  id: string;
+  category: string | null;
+  contains: string;
+  remember: boolean;
+  billable: boolean;
+  recurring: boolean;
+}): void {
+  ready();
+  const txn = store.getTransaction(input.id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  const category = input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
+  const contains = normalizeContains(input.contains || txn.description);
+  if (input.remember && !category) {
+    throw new SpendableError("Add a category before saving that rule.", "bad_category");
+  }
+  if ((input.remember || input.recurring) && contains.length < 2) {
+    throw new SpendableError("The match text needs at least two characters.", "bad_rule");
+  }
+  if (input.recurring && txn.amountCents >= 0) {
+    throw new SpendableError("A bill is money leaving the account.", "bad_bill");
+  }
+  store.withTransaction(() => {
+    if (store.setTransactionCategory(input.id, category) === 0) {
+      throw new SpendableError("No transaction with that id.", "not_found", 404);
+    }
+    if (input.remember && category) {
+      store.upsertRule(contains, category);
+      store.applyCategoryRules();
+    } else if (contains) {
+      store.deleteRule(contains);
+    }
+    if (!input.billable || !contains) return;
+    if (input.recurring) {
+      store.upsertRecurringBill({
+        matchText: contains,
+        name: sanitizeLabel(txn.description, 80) || contains,
+        amountCents: Math.abs(txn.amountCents),
+        dueDay: dueDayFromPosted(txn.posted),
+      });
+      return;
+    }
+    store.deactivateRecurringBill(contains);
+  });
 }
 
 export function createBill(input: { name: string; amountCents: number; dueDay: number }): { id: string } {
@@ -179,7 +288,8 @@ export function dollarsToCents(input: string, label: string): number {
 
 function syncStart(lastSyncAt: string | null): number {
   const now = Math.floor(Date.now() / 1000);
-  const earliest = now - 90 * 86_400;
+  // 89 days: a 90-day window makes the bridge return an error.
+  const earliest = now - 89 * 86_400;
   if (!lastSyncAt) return earliest;
   const last = Math.floor(Date.parse(lastSyncAt) / 1000);
   if (!Number.isFinite(last)) return earliest;
@@ -202,6 +312,7 @@ export async function sync(): Promise<{ syncedAt: string; accounts: number; erro
     for (const remote of result.accounts) {
       const existing = store.getAccount(remote.id);
       const kept = mergeBankAccount(existing, remote.name);
+      const kind = existing?.kind && isAccountKind(existing.kind) ? existing.kind : inferKind(remote.name);
       store.upsertSyncedAccount({
         id: remote.id,
         name: remote.name,
@@ -211,6 +322,9 @@ export async function sync(): Promise<{ syncedAt: string; accounts: number; erro
         availableCents: remote.availableCents,
         balanceDate: remote.balanceDate,
         ...kept,
+        role: existing ? kept.role : roleForKind(kind),
+        kind,
+        tracked: existing ? existing.tracked !== false : true,
       });
       for (const txn of remote.transactions) {
         store.upsertSyncedTransaction({
@@ -223,6 +337,7 @@ export async function sync(): Promise<{ syncedAt: string; accounts: number; erro
         });
       }
     }
+    store.applyCategoryRules();
     store.markSynced(syncedAt, result.errors);
   });
   return { syncedAt, accounts: result.accounts.length, errors: result.errors };

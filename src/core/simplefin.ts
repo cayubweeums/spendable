@@ -197,10 +197,17 @@ export async function claimAccessUrl(setupToken: string, fetchImpl: typeof fetch
     response = await fetchImpl(claimUrl, {
       method: "POST",
       headers: { "Content-Length": "0" },
-      redirect: "follow",
+      redirect: "manual",
     });
   } catch {
     throw new SpendableError("Could not reach SimpleFIN to claim that token.", "claim_unreachable", 502);
+  }
+  if (response.status >= 300 && response.status < 400) {
+    throw new SpendableError(
+      "SimpleFIN sent a redirect instead of an access URL. The token was not saved.",
+      "claim_redirect",
+      502,
+    );
   }
   if (response.status === 403) {
     throw new SpendableError(
@@ -213,6 +220,13 @@ export async function claimAccessUrl(setupToken: string, fetchImpl: typeof fetch
     throw new SpendableError(`SimpleFIN did not accept that token (${response.status}).`, "claim_failed", 502);
   }
   const accessUrl = (await response.text()).trim();
+  if (accessUrl.startsWith("Forbidden")) {
+    throw new SpendableError(
+      "SimpleFIN refused that token. It may already be used. If you did not claim it, disable it and create a new one.",
+      "claim_rejected",
+      403,
+    );
+  }
   parseAccessUrl(accessUrl);
   return accessUrl;
 }
