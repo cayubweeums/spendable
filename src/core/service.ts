@@ -42,34 +42,51 @@ function startSession(): string {
 }
 
 export function passwordIsSet(): boolean {
+  if (store.isSealed()) return true;
   return store.getMeta("password_hash") !== "";
 }
 
 export function establishPassword(password: string, confirm: string): string {
   assertPassword(password);
   if (password !== confirm) throw new SpendableError("Those passwords do not match.", "password_mismatch");
-  return store.withTransaction(() => {
+  if (store.isSealed()) throw new SpendableError("A password is already set.", "password_set");
+  store.withTransaction(() => {
     if (store.getMeta("password_hash")) throw new SpendableError("A password is already set.", "password_set");
     store.setMeta("password_hash", hashPassword(password));
-    return startSession();
   });
+  store.seal(password);
+  return startSession();
 }
 
 // shortcut: wrong passwords are not rate limited, add a delay if this port is reachable beyond the host
 export function signIn(password: string): string {
+  if (store.isSealed()) {
+    if (!store.isUnlocked()) store.unlock(password);
+    else if (!passwordMatches(password, store.getMeta("password_hash"))) {
+      throw new SpendableError("That password is wrong.", "bad_password", 401);
+    }
+    return startSession();
+  }
   const stored = store.getMeta("password_hash");
   if (!stored) throw new SpendableError("Choose a password first.", "no_password");
   if (!passwordMatches(password, stored)) throw new SpendableError("That password is wrong.", "bad_password", 401);
+  store.seal(password);
   return startSession();
 }
 
 export function sessionIsOpen(token: string | null | undefined, now = Date.now()): boolean {
   if (!token) return false;
+  if (store.isSealed() && !store.isUnlocked()) return false;
   return store.sessionOpen(token, now);
 }
 
 export function closeSession(token: string | null | undefined): void {
+  if (!store.isUnlocked()) {
+    if (!store.isSealed() && token) store.deleteSession(token);
+    return;
+  }
   if (token) store.deleteSession(token);
+  store.lock();
 }
 
 export function ready(): void {

@@ -4,9 +4,11 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
+import { SpendableError } from "./errors";
 import { categoryFor, type CategoryRule } from "./rules";
 import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
 import type { PaydayFrequency } from "./dates";
+import { isSeal, openSeal, sealPlaintext, sealWithKey } from "./vault";
 
 type AccountRow = {
   id: string;
@@ -50,15 +52,150 @@ type ConnectionRow = {
   last_errors: string;
 };
 
-const globalForDb = globalThis as unknown as { spendableDb?: DatabaseSync };
+// shortcut: one key for this process, and sign-out drops it. Keep a key per session when a second user exists.
+const globalForDb = globalThis as unknown as {
+  spendableDb?: DatabaseSync;
+  spendableKey?: Buffer;
+  spendableSalt?: Buffer;
+  txDepth?: number;
+  dirty?: boolean;
+};
 
 function databasePath(): string {
   return process.env.SPENDABLE_DB_PATH ?? path.join(process.cwd(), "data", "spendable.db");
 }
 
+function fileIsSealed(file: string): boolean {
+  if (!fs.existsSync(file)) return false;
+  const fd = fs.openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(5);
+    return fs.readSync(fd, buf, 0, 5, 0) === 5 && isSeal(buf);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export function isSealed(): boolean {
+  return globalForDb.spendableKey != null || fileIsSealed(databasePath());
+}
+
+export function isUnlocked(): boolean {
+  return globalForDb.spendableKey != null;
+}
+
+function atomicWrite(file: string, body: Buffer): void {
+  const tmp = `${file}.tmp`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeSync(fd, body);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, file);
+}
+
+function persistUnlocked(): void {
+  const key = globalForDb.spendableKey;
+  const salt = globalForDb.spendableSalt;
+  const database = globalForDb.spendableDb;
+  if (!key || !salt || !database) {
+    globalForDb.dirty = false;
+    return;
+  }
+  atomicWrite(databasePath(), sealWithKey(database.serialize(), key, salt));
+  globalForDb.dirty = false;
+}
+
+function noteWrite(): void {
+  if ((globalForDb.txDepth ?? 0) > 0) {
+    globalForDb.dirty = true;
+    return;
+  }
+  persistUnlocked();
+}
+
+function remember(database: DatabaseSync): DatabaseSync {
+  const prepare = database.prepare.bind(database);
+  const exec = database.exec.bind(database);
+  const writes = /^\s*(insert|update|delete|replace|alter)\b/i;
+  database.prepare = (sql: string) => {
+    const stmt = prepare(sql);
+    if (!writes.test(sql)) return stmt;
+    const run = stmt.run.bind(stmt);
+    stmt.run = ((...args: Parameters<typeof run>) => {
+      const result = run(...args);
+      noteWrite();
+      return result;
+    }) as typeof stmt.run;
+    return stmt;
+  };
+  database.exec = (sql: string) => {
+    exec(sql);
+    if (writes.test(sql)) noteWrite();
+  };
+  return database;
+}
+
+function openMemory(plain: Uint8Array, key: Buffer, salt: Buffer): void {
+  const memory = new DatabaseSync(":memory:");
+  memory.deserialize(plain);
+  memory.exec("PRAGMA foreign_keys = ON;");
+  remember(memory);
+  globalForDb.spendableDb = memory;
+  globalForDb.spendableKey = key;
+  globalForDb.spendableSalt = salt;
+  ensureColumns(memory);
+}
+
+export function seal(password: string): void {
+  if (globalForDb.spendableKey) return;
+  const database = db();
+  // A WAL snapshot cannot be loaded into a memory database.
+  database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  database.exec("PRAGMA journal_mode = DELETE");
+  const plain = Buffer.from(database.serialize());
+  const sealed = sealPlaintext(plain, password);
+  database.close();
+  globalForDb.spendableDb = undefined;
+  const file = databasePath();
+  fs.rmSync(`${file}-wal`, { force: true });
+  fs.rmSync(`${file}-shm`, { force: true });
+  atomicWrite(file, sealed.packed);
+  openMemory(plain, sealed.key, sealed.salt);
+}
+
+// shortcut: a damaged seal reports the same error as a wrong password. Split them when a backup can be offered.
+export function unlock(password: string): void {
+  let opened: ReturnType<typeof openSeal>;
+  try {
+    opened = openSeal(fs.readFileSync(/*turbopackIgnore: true*/ databasePath()), password);
+  } catch {
+    throw new SpendableError("That password is wrong.", "bad_password", 401);
+  }
+  if (!opened.plain.subarray(0, 15).equals(Buffer.from("SQLite format 3"))) {
+    opened.key.fill(0);
+    throw new SpendableError("That password is wrong.", "bad_password", 401);
+  }
+  openMemory(opened.plain, opened.key, opened.salt);
+}
+
+export function lock(): void {
+  if (globalForDb.spendableKey) persistUnlocked();
+  globalForDb.spendableDb?.close();
+  globalForDb.spendableDb = undefined;
+  globalForDb.spendableKey?.fill(0);
+  globalForDb.spendableKey = undefined;
+  globalForDb.spendableSalt = undefined;
+  globalForDb.dirty = false;
+  globalForDb.txDepth = 0;
+}
+
 export function db(): DatabaseSync {
   if (!globalForDb.spendableDb) {
     const file = databasePath();
+    if (fileIsSealed(file)) throw new SpendableError("Sign in first.", "locked", 401);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const database = new DatabaseSync(file);
     database.exec(`
@@ -171,16 +308,18 @@ function storedKind(account: Account): AccountKind {
 }
 
 export function closeDb(): void {
-  globalForDb.spendableDb?.close();
-  globalForDb.spendableDb = undefined;
+  lock();
 }
 
 export function withTransaction<T>(fn: () => T): T {
   const database = db();
+  globalForDb.txDepth = (globalForDb.txDepth ?? 0) + 1;
   database.exec("BEGIN");
   try {
     const result = fn();
     database.exec("COMMIT");
+    globalForDb.txDepth = (globalForDb.txDepth ?? 1) - 1;
+    if (globalForDb.dirty) persistUnlocked();
     return result;
   } catch (error) {
     try {
@@ -188,6 +327,8 @@ export function withTransaction<T>(fn: () => T): T {
     } catch {
       /* already closed */
     }
+    globalForDb.txDepth = (globalForDb.txDepth ?? 1) - 1;
+    globalForDb.dirty = false;
     throw error;
   }
 }
