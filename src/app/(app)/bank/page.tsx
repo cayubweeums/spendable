@@ -2,6 +2,7 @@ import { connectBank, disconnectBank, importBackup, loadSample } from "../../act
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
+import { SyncScheduleForm } from "@/components/sync-schedule";
 import { connectionStatus } from "@/core/service";
 
 export default async function BankPage({
@@ -24,12 +25,9 @@ export default async function BankPage({
           </a>
           .
         </p>
-        <p>Sync in the header. After 12 hours, opening the app copies again.</p>
       </div>
       {status.connected ? (
-        <p>
-          Connected{status.syncedAt ? ` · last copy ${status.syncedAt}` : ""}. The access URL stays in the local database and is not shown here.
-        </p>
+        <p>Connected{status.syncedAt ? ` · last copy ${status.syncedAt}` : ""}.</p>
       ) : (
         <p>No bank is connected.</p>
       )}
@@ -49,8 +47,11 @@ export default async function BankPage({
         <SubmitButton pending="Claiming the token…">Connect</SubmitButton>
       </form>
       <section className="section stack">
+        <h2>Sync</h2>
+        <SyncScheduleForm on={status.sync.on} everyHours={status.sync.everyHours} at={status.sync.at} />
+      </section>
+      <section className="section stack">
         <h2>Backup</h2>
-        <p>Download a zip of the data on this server. Import replaces that data. Sign in again with the password from the zip.</p>
         <p>
           <a className="button" href="/api/v1/backup">
             Download zip

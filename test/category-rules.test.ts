@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { categoryFor } from "../src/core/rules";
+import { syncIsDue } from "../src/core/sync-due";
 import { syncIsStale, SYNC_INTERVAL_MS } from "../src/core/service";
 
 describe("category rules", () => {
@@ -24,6 +25,17 @@ describe("when a bank copy is due", () => {
     assert.equal(syncIsStale(null, now), true);
     assert.equal(syncIsStale("2026-10-27T01:00:00.000Z", now), false);
     assert.equal(syncIsStale(new Date(now - SYNC_INTERVAL_MS).toISOString(), now), true);
+  });
+
+  it("waits for the local clock and stays quiet when sync is off", () => {
+    const early = new Date(2026, 9, 27, 6, 0).getTime();
+    const later = new Date(2026, 9, 27, 8, 0).getTime();
+    const yesterday = new Date(2026, 9, 26, 8, 0).toISOString();
+    const schedule = { on: true, everyHours: 12, at: "07:00" };
+    assert.equal(syncIsDue(yesterday, schedule, early), false);
+    assert.equal(syncIsDue(yesterday, schedule, later), true);
+    assert.equal(syncIsDue(yesterday, { ...schedule, on: false }, later), false);
+    assert.equal(syncIsDue(new Date(later).toISOString(), schedule, later), false);
   });
 });
 
@@ -75,6 +87,18 @@ describe("saving a rule and a monthly bill", () => {
       });
       assert.equal(store.listBills().find((item) => item.matchText === "lane coffee")?.active, false);
       assert.equal(store.getAccount("demo_checking")?.balanceCents, 441_255);
+
+      assert.deepEqual(service.connectionStatus().sync, { on: true, everyHours: 12, at: "" });
+      assert.deepEqual(service.saveSyncSchedule({ on: true, everyHours: 24, at: "07:00:00" }), {
+        on: true,
+        everyHours: 24,
+        at: "07:00",
+      });
+      const off = service.saveSyncSchedule({ on: false });
+      assert.equal(off.on, false);
+      assert.equal(off.everyHours, 24);
+      assert.throws(() => service.saveSyncSchedule({ everyHours: 3 }), /Not a choice/);
+      assert.equal(service.connectionStatus().sync.everyHours, 24);
     } finally {
       service.closeDb();
     }

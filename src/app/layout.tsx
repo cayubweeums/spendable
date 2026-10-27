@@ -6,7 +6,7 @@ import { AutoSync } from "@/components/auto-sync";
 import { Nav } from "@/components/nav";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncForm } from "@/components/sync-form";
-import { connectionStatus, needsOnboarding, passwordIsSet, syncIsStale } from "@/core/service";
+import { connectionStatus, needsOnboarding, passwordIsSet } from "@/core/service";
 import "./globals.css";
 
 const display = Fraunces({
@@ -42,7 +42,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   const authed = await signedIn();
   const onboarding = authed && needsOnboarding();
   const status = authed ? connectionStatus() : null;
-  const stale = status != null && !onboarding && status.connected && !status.demo && syncIsStale(status.syncedAt);
+  const autoSync = status != null && !onboarding && status.connected && !status.demo && status.sync.on;
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>
@@ -73,7 +73,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           ) : null}
         </header>
         <main id="main">
-          {stale ? <AutoSync stale /> : null}
+          {autoSync ? (
+            <AutoSync syncedAt={status.syncedAt} everyHours={status.sync.everyHours} at={status.sync.at} />
+          ) : null}
           {children}
         </main>
       </body>
