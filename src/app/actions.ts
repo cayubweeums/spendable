@@ -59,6 +59,8 @@ function applyAccountForm(formData: FormData) {
         credit && typeof minimumRaw === "string" && minimumRaw.trim() !== ""
           ? Math.max(0, dollarsToCents(minimumRaw, "Minimum payment"))
           : undefined,
+      label: typeof formData.get(`label:${account.id}`) === "string" ? String(formData.get(`label:${account.id}`)) : undefined,
+      note: typeof formData.get(`note:${account.id}`) === "string" ? String(formData.get(`note:${account.id}`)) : undefined,
     });
   }
 }

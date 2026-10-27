@@ -16,6 +16,11 @@ export function isAccountKind(value: string | undefined): value is AccountKind {
   return value != null && KINDS.has(value);
 }
 
+export function accountTitle(account: { name: string; label?: string | null }): string {
+  const label = account.label?.trim();
+  return label ? label : account.name;
+}
+
 export function inferKind(name: string): AccountKind {
   const normalized = name.toLowerCase();
   if (/roth\s*ira/.test(normalized)) return "roth_ira";

@@ -24,6 +24,8 @@ type AccountRow = {
   minimum_cents: number;
   kind?: string;
   tracked?: number;
+  label?: string;
+  note?: string;
 };
 
 type BillRow = {
@@ -292,6 +294,12 @@ function ensureColumns(database: DatabaseSync): void {
   if (!accounts.has("tracked")) {
     database.exec("ALTER TABLE accounts ADD COLUMN tracked INTEGER NOT NULL DEFAULT 1");
   }
+  if (!accounts.has("label")) {
+    database.exec("ALTER TABLE accounts ADD COLUMN label TEXT NOT NULL DEFAULT ''");
+  }
+  if (!accounts.has("note")) {
+    database.exec("ALTER TABLE accounts ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
   if (!tableColumns(database, "bills").has("match_text")) {
     database.exec("ALTER TABLE bills ADD COLUMN match_text TEXT");
   }
@@ -396,6 +404,8 @@ function mapAccount(row: AccountRow): Account {
     minimumCents: row.minimum_cents,
     kind: isAccountKind(row.kind) ? row.kind : kindFromRole(row.role),
     tracked: row.tracked == null ? true : row.tracked === 1,
+    label: row.label ?? "",
+    note: row.note ?? "",
   };
 }
 
@@ -483,13 +493,25 @@ export function updateAccountRules(
     dueDay: number | null;
     payMode: PayMode;
     minimumCents: number;
+    label: string;
+    note: string;
   },
 ): number {
   const result = db()
     .prepare(
-      "UPDATE accounts SET role = ?, kind = ?, tracked = ?, due_day = ?, pay_mode = ?, minimum_cents = ? WHERE id = ?",
+      "UPDATE accounts SET role = ?, kind = ?, tracked = ?, due_day = ?, pay_mode = ?, minimum_cents = ?, label = ?, note = ? WHERE id = ?",
     )
-    .run(rules.role, rules.kind, rules.tracked ? 1 : 0, rules.dueDay, rules.payMode, rules.minimumCents, id);
+    .run(
+      rules.role,
+      rules.kind,
+      rules.tracked ? 1 : 0,
+      rules.dueDay,
+      rules.payMode,
+      rules.minimumCents,
+      rules.label,
+      rules.note,
+      id,
+    );
   return Number(result.changes ?? 0);
 }
 

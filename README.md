@@ -42,7 +42,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Encrypt the data with the login password, and decrypt it after login. The server does not keep that key.
 - [x] Download a zip of the server data, and import that zip later
 - [x] Turn bank sync on or off, and choose how often it runs and when
-- [ ] Rename an account and keep a note on it
+- [x] Rename an account and keep a note on it
 - [ ] Categories, with groups, rename, merge, delete, hide, and notes
 - [ ] Payees: rename, merge, favorite, and a default category
 - [ ] Notes on transactions, categories, and accounts
