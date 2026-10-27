@@ -6,7 +6,14 @@ import { SpendableError, scrubSecrets } from "./errors";
 import { decimalToCents } from "./money";
 import { hashPassword, passwordMatches } from "./password";
 import { unzipDatabase, zipDatabase } from "./zip";
-import { normalizeContains, type CategoryRule } from "./rules";
+import {
+  isRuleField,
+  normalizeContains,
+  RULE_FIELD_OPS,
+  type CategoryRule,
+  type MatchRule,
+  type RuleOp,
+} from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
@@ -219,6 +226,78 @@ export function syncIsStale(syncedAt: string | null, now = Date.now()): boolean 
 export function listRules(): CategoryRule[] {
   ready();
   return store.listRules();
+}
+
+export type RuleInput = {
+  id?: string;
+  ord?: number;
+  stage: string;
+  field: string;
+  op: string;
+  value: string;
+  action: string;
+  actionValue: string;
+};
+
+function normalizeRule(input: RuleInput, index: number): MatchRule {
+  if (input.stage !== "before" && input.stage !== "after") throw new SpendableError("Not a choice.", "bad_rule");
+  if (!isRuleField(input.field)) throw new SpendableError("Not a choice.", "bad_rule");
+  const ops: readonly string[] = RULE_FIELD_OPS[input.field];
+  if (!ops.includes(input.op)) throw new SpendableError("Not a choice.", "bad_rule");
+  const value = input.field === "amount" || input.field === "date" ? input.value.trim() : sanitizeLabel(input.value, 180);
+  if (input.field === "date" && !isISODate(value)) throw new SpendableError("Bad date.", "bad_date");
+  if (input.field === "amount") {
+    try {
+      decimalToCents(value);
+    } catch {
+      throw new SpendableError("Bad amount.", "bad_amount");
+    }
+  }
+  if (input.op === "contains" && value.length < 2) throw new SpendableError("The match text needs at least two characters.", "bad_rule");
+  if (!value) throw new SpendableError("Not a choice.", "bad_rule");
+  if (input.action !== "category" && input.action !== "payee" && input.action !== "notes" && input.action !== "tag") {
+    throw new SpendableError("Not a choice.", "bad_rule");
+  }
+  const cap = input.action === "notes" ? 280 : input.action === "payee" ? 180 : 40;
+  const actionValue = sanitizeLabel(input.actionValue, cap);
+  if (!actionValue) throw new SpendableError("Not a choice.", "bad_rule");
+  const id = sanitizeLabel(input.id ?? "", 80) || randomUUID();
+  const ord = typeof input.ord === "number" && Number.isInteger(input.ord) ? input.ord : index;
+  return {
+    id,
+    ord,
+    stage: input.stage,
+    field: input.field,
+    op: input.op as RuleOp,
+    value,
+    action: input.action,
+    actionValue,
+  };
+}
+
+export function listMatchRules(): MatchRule[] {
+  ready();
+  return store.listMatchRules();
+}
+
+export function saveRules(input: RuleInput[]): MatchRule[] {
+  ready();
+  const rules = input.map((rule, index) => normalizeRule(rule, index));
+  const ids = new Set<string>();
+  for (const rule of rules) {
+    if (ids.has(rule.id)) throw new SpendableError("Not a choice.", "bad_rule");
+    ids.add(rule.id);
+  }
+  store.withTransaction(() => {
+    store.replaceMatchRules(rules);
+    store.applyImportedRules();
+  });
+  return store.listMatchRules();
+}
+
+export function removeMatchRule(id: string): void {
+  ready();
+  if (!store.deleteMatchRule(id)) throw new SpendableError("No rule.", "not_found", 404);
 }
 
 function assertRole(role: string): Role {
@@ -477,7 +556,7 @@ export function setTags(id: string, tags: string): void {
   store.setTransactionTags(id, parseTags(tags));
 }
 
-// shortcut: eight labels, comma-separated. The rule stores the first. A tag editor waits for the full rules.
+// shortcut: eight labels, comma-separated. The description rule stores the first. A match rule adds one tag and leaves the rest.
 function parseTags(input: string): string[] {
   const seen = new Set<string>();
   const tags: string[] = [];
@@ -570,6 +649,7 @@ export async function sync(): Promise<{ syncedAt: string; accounts: number; erro
         });
       }
     }
+    store.applyImportedRules();
     store.applyCategoryRules();
     store.markSynced(syncedAt, result.errors);
   });

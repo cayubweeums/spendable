@@ -381,6 +381,8 @@ table.ledger .out { color: var(--debit); }
 
 table.ledger.edit { table-layout: auto; min-width: 42rem; }
 
+table.ledger.edit.wide { min-width: 64rem; }
+
 .ledger-scroll { overflow-x: auto; }
 
 table.ledger.edit input:not([type="checkbox"]),
@@ -389,6 +391,8 @@ table.ledger.edit select {
   max-width: none;
   padding: 0.15rem 0;
 }
+
+table.ledger.edit input[type="number"] { width: 4rem; }
 
 table.ledger.edit th.tight,
 table.ledger.edit td.tight { width: 1%; white-space: nowrap; padding-right: 0.75rem; }
