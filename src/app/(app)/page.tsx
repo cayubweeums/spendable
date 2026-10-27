@@ -1,4 +1,4 @@
-import { saveSettings, saveTransaction } from "../actions";
+import { saveSettings, saveTransaction, undoTransaction } from "../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { PaceChart, paceCaption } from "@/components/pace-chart";
@@ -7,7 +7,7 @@ import { formatLong, formatTimestamp, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
 import { kindLabel } from "@/core/bank";
 import { matchingRule } from "@/core/rules";
-import { getSettings, getSnapshot, listBills, listCategories, listPayees, listRules } from "@/core/service";
+import { canUndo, getSettings, getSnapshot, listBills, listCategories, listPayees, listRules } from "@/core/service";
 
 export default async function HomePage({
   searchParams,
@@ -112,7 +112,16 @@ export default async function HomePage({
           </section>
 
           <section>
-            <h2 className="kicker">Charges</h2>
+            <div className="charge-head">
+              <h2 className="kicker">Charges</h2>
+              {canUndo() ? (
+                <form action={undoTransaction}>
+                  <button className="quiet" type="submit">
+                    Undo
+                  </button>
+                </form>
+              ) : null}
+            </div>
             <datalist id="categories">
               {categoryNames.map((name) => (
                 <option key={name} value={name} />

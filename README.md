@@ -51,7 +51,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Saving a category or payee can create a rule for the next import. That can be turned off.
 - [x] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
 - [x] Split one transaction across categories
-- [ ] Undo an edit
+- [x] Undo an edit
 - [ ] Filters that stack, and that you can save
 - [ ] Edit or duplicate several transactions at once
 - [ ] Merge two duplicate transactions and keep the fields that were filled in

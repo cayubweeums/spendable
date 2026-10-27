@@ -30,6 +30,7 @@ import {
   setLearnRules,
   saveSyncSchedule,
   saveTransactionDetails,
+  undoEdit,
   signIn,
   sync,
   updateAccount,
@@ -304,6 +305,17 @@ export async function saveTransaction(formData: FormData) {
   }
   refresh();
   redirect("/?notice=saved");
+}
+
+export async function undoTransaction() {
+  await requirePage();
+  try {
+    undoEdit();
+  } catch (error) {
+    await bail("/", error);
+  }
+  refresh();
+  redirect("/?notice=undone");
 }
 
 export async function addBill(formData: FormData) {

@@ -5,6 +5,7 @@ const notices: Record<string, string> = {
   connected: "Bank connected. Balances below are the ones just copied.",
   synced: "Balances copied.",
   saved: "Saved.",
+  undone: "Undone.",
   sample: "Sample numbers are loaded.",
   disconnected: "The connection is forgotten. The last copied balances are still here.",
 };

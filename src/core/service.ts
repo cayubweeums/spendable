@@ -484,6 +484,7 @@ export function saveTransactionDetails(input: {
     throw new SpendableError("A bill is money leaving the account.", "bad_bill");
   }
   store.withTransaction(() => {
+    holdCharge(txn);
     if (store.setTransactionCategory(input.id, category) === 0) {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
@@ -638,12 +639,84 @@ function normalizeSplits(
   return rows;
 }
 
+// shortcut: one charge edit. A rule, a bill, or a rename stays. A second edit replaces this one.
+function holdCharge(txn: { id: string; category: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] }): void {
+  store.setMeta(
+    "undo",
+    JSON.stringify({
+      id: txn.id,
+      category: txn.category,
+      note: txn.note ?? "",
+      tags: txn.tags ?? [],
+      splits: txn.splits ?? [],
+    }),
+  );
+}
+
+export function canUndo(): boolean {
+  ready();
+  return store.getMeta("undo") !== "";
+}
+
+export function undoEdit(): void {
+  ready();
+  const raw = store.getMeta("undo");
+  if (!raw) throw new SpendableError("Nothing to undo.", "no_undo");
+  let saved: { id?: string; category?: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] };
+  try {
+    saved = JSON.parse(raw) as typeof saved;
+  } catch {
+    store.setMeta("undo", "");
+    throw new SpendableError("Nothing to undo.", "no_undo");
+  }
+  if (!saved.id || !store.getTransaction(saved.id)) {
+    store.setMeta("undo", "");
+    throw new SpendableError("Nothing to undo.", "no_undo");
+  }
+  const id = saved.id;
+  store.withTransaction(() => {
+    store.setTransactionCategory(id, saved.category ?? null);
+    store.setTransactionNote(id, saved.note ?? "");
+    store.setTransactionTags(id, Array.isArray(saved.tags) ? saved.tags : []);
+    store.replaceSplits(id, Array.isArray(saved.splits) ? saved.splits : []);
+    store.setMeta("undo", "");
+  });
+}
+
+export function editCharge(
+  id: string,
+  patch: { category?: string | null; note?: string; tags?: string; splits?: { category: string; amount: string }[] },
+): void {
+  ready();
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  const parts = patch.splits == null ? null : normalizeSplits(txn.amountCents, patch.splits);
+  store.withTransaction(() => {
+    holdCharge(txn);
+    if (parts) {
+      store.replaceSplits(id, parts);
+      if (parts.length > 0) store.setTransactionCategory(id, null);
+    } else if (patch.category !== undefined) {
+      const cleaned = patch.category == null || patch.category.trim() === "" ? null : sanitizeLabel(patch.category, 40);
+      if (store.setTransactionCategory(id, cleaned) === 0) {
+        throw new SpendableError("No transaction with that id.", "not_found", 404);
+      }
+      if (cleaned) learnMatch("imported_payee", txn.description, cleaned);
+    }
+    if (patch.note != null && store.setTransactionNote(id, sanitizeLabel(patch.note, 280)) === 0) {
+      throw new SpendableError("No transaction with that id.", "not_found", 404);
+    }
+    if (patch.tags != null) store.setTransactionTags(id, parseTags(patch.tags));
+  });
+}
+
 export function setSplits(id: string, parts: { category: string; amount: string }[]): void {
   ready();
   const txn = store.getTransaction(id);
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
   const rows = normalizeSplits(txn.amountCents, parts);
   store.withTransaction(() => {
+    holdCharge(txn);
     store.replaceSplits(id, rows);
     if (rows.length > 0) store.setTransactionCategory(id, null);
   });
@@ -654,6 +727,7 @@ export function setCategory(id: string, category: string | null): void {
   const txn = store.getTransaction(id);
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
   const cleaned = category == null || category.trim() === "" ? null : sanitizeLabel(category, 40);
+  holdCharge(txn);
   if (store.setTransactionCategory(id, cleaned) === 0) {
     throw new SpendableError("No transaction with that id.", "not_found", 404);
   }
@@ -662,6 +736,9 @@ export function setCategory(id: string, category: string | null): void {
 
 export function setNote(id: string, note: string): void {
   ready();
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  holdCharge(txn);
   if (store.setTransactionNote(id, sanitizeLabel(note, 280)) === 0) {
     throw new SpendableError("No transaction with that id.", "not_found", 404);
   }
@@ -669,7 +746,9 @@ export function setNote(id: string, note: string): void {
 
 export function setTags(id: string, tags: string): void {
   ready();
-  if (!store.getTransaction(id)) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  holdCharge(txn);
   store.setTransactionTags(id, parseTags(tags));
 }
 
