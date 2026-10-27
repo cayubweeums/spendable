@@ -11,7 +11,7 @@ import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
 import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
-import type { AccountKind, Category, PayMode, Role, Settings, Snapshot } from "./types";
+import type { AccountKind, Category, Payee, PayMode, Role, Settings, Snapshot } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export { syncIsDue, type SyncSchedule };
@@ -413,6 +413,40 @@ export function removeCategory(name: string): void {
   store.withTransaction(() => {
     if (store.forgetCategory(name) === 0) throw new SpendableError("No category with that name.", "not_found", 404);
   });
+}
+
+export function listPayees(): Payee[] {
+  ready();
+  return store.listPayees();
+}
+
+export function updatePayee(name: string, patch: { name?: string; favorite?: boolean; category?: string }): void {
+  ready();
+  const current = store.getPayee(name);
+  if (!current) throw new SpendableError("No payee with that name.", "not_found", 404);
+  const nextName = patch.name == null ? name : sanitizeLabel(patch.name, 180);
+  if (!nextName) throw new SpendableError("A payee needs a name.", "bad_payee");
+  const favorite = patch.favorite == null ? current.favorite : patch.favorite;
+  const category = patch.category == null ? current.category : sanitizeLabel(patch.category, 40);
+  store.withTransaction(() => {
+    if (nextName !== name) store.renamePayee(name, nextName);
+    if (store.writePayee(nextName, { favorite, category }) === 0) {
+      throw new SpendableError("No payee with that name.", "not_found", 404);
+    }
+    if (category) {
+      store.insertCategory(category);
+      store.fillPayeeCategory(nextName);
+    }
+  });
+}
+
+export function mergePayee(from: string, into: string): void {
+  ready();
+  if (from === into) throw new SpendableError("Pick another payee.", "bad_payee");
+  if (!store.getPayee(from) || !store.getPayee(into)) {
+    throw new SpendableError("No payee with that name.", "not_found", 404);
+  }
+  store.withTransaction(() => store.retargetPayee(from, into));
 }
 
 export function setCategory(id: string, category: string | null): void {

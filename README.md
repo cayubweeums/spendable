@@ -44,7 +44,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Turn bank sync on or off, and choose how often it runs and when
 - [x] Rename an account and keep a note on it
 - [x] Categories, with groups, rename, merge, delete, hide, and notes
-- [ ] Payees: rename, merge, favorite, and a default category
+- [x] Payees: rename, merge, favorite, and a default category
 - [ ] Notes on transactions, categories, and accounts
 - [ ] Tags on transactions. A tag is only a label. A rule can set one.
 - [ ] Rules that match imported payee, payee, account, category, date, notes, amount, or tag, then set category, payee, notes, or tag. Rules run in order, before and after import.

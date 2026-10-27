@@ -48,6 +48,13 @@ export type Category = {
   hidden: boolean;
 };
 
+export type Payee = {
+  name: string;
+  favorite: boolean;
+  category: string;
+  descriptions: string[];
+};
+
 export type Settings = {
   paydayFrequency: PaydayFrequency;
   paydayAnchor: string;

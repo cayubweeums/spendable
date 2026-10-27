@@ -314,6 +314,16 @@ function ensureColumns(database: DatabaseSync): void {
       note TEXT NOT NULL DEFAULT '',
       hidden INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS payees (
+      name TEXT PRIMARY KEY,
+      favorite INTEGER NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT ''
+    );
+    -- shortcut: the bank text is the key. Two wordings of one shop stay two payees until they are merged.
+    CREATE TABLE IF NOT EXISTS payee_keys (
+      description TEXT PRIMARY KEY,
+      name TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
@@ -578,6 +588,26 @@ export function upsertSyncedTransaction(txn: Omit<Transaction, "category">): voi
          pending = excluded.pending`,
     )
     .run(txn.id, txn.accountId, txn.posted, txn.amountCents, txn.description, txn.pending ? 1 : 0);
+  applyPayeeCategory(txn.id);
+}
+
+function applyPayeeCategory(id: string): void {
+  db()
+    .prepare(
+      `UPDATE transactions
+       SET category = (
+         SELECT p.category FROM payee_keys k
+         JOIN payees p ON p.name = k.name
+         WHERE k.description = transactions.description AND p.category != ''
+       )
+       WHERE id = ? AND category IS NULL
+         AND EXISTS (
+           SELECT 1 FROM payee_keys k
+           JOIN payees p ON p.name = k.name
+           WHERE k.description = transactions.description AND p.category != ''
+         )`,
+    )
+    .run(id);
 }
 
 export function getTransaction(id: string): Transaction | null {
@@ -682,6 +712,77 @@ export function forgetCategory(name: string): number {
   db().prepare("DELETE FROM rules WHERE category = ?").run(name);
   const result = db().prepare("DELETE FROM categories WHERE name = ?").run(name);
   return Number(result.changes ?? 0);
+}
+
+export type StoredPayee = {
+  name: string;
+  favorite: boolean;
+  category: string;
+  descriptions: string[];
+};
+
+export function listPayees(): StoredPayee[] {
+  const database = db();
+  database.exec(`
+    INSERT INTO payees (name)
+    SELECT DISTINCT description FROM transactions
+    WHERE description != '' AND description NOT IN (SELECT description FROM payee_keys)
+    ON CONFLICT(name) DO NOTHING;
+    INSERT INTO payee_keys (description, name)
+    SELECT DISTINCT description, description FROM transactions
+    WHERE description != '' AND description NOT IN (SELECT description FROM payee_keys)
+    ON CONFLICT(description) DO NOTHING;
+  `);
+  const rows = database
+    .prepare(
+      `SELECT p.name, p.favorite, p.category, k.description
+       FROM payees p
+       LEFT JOIN payee_keys k ON k.name = p.name
+       ORDER BY p.favorite DESC, p.name COLLATE NOCASE, k.description COLLATE NOCASE`,
+    )
+    .all() as { name: string; favorite: number; category: string; description: string | null }[];
+  const payees: StoredPayee[] = [];
+  for (const row of rows) {
+    const last = payees.at(-1);
+    const descriptions = row.description ? [row.description] : [];
+    if (!last || last.name !== row.name) {
+      payees.push({ name: row.name, favorite: row.favorite === 1, category: row.category, descriptions });
+    } else if (row.description) last.descriptions.push(row.description);
+  }
+  return payees;
+}
+
+export function getPayee(name: string): StoredPayee | null {
+  return listPayees().find((payee) => payee.name === name) ?? null;
+}
+
+export function renamePayee(from: string, to: string): void {
+  if (from === to) return;
+  if (db().prepare("SELECT 1 AS ok FROM payees WHERE name = ?").get(to)) {
+    throw new SpendableError("That name is taken.", "bad_payee");
+  }
+  const result = db().prepare("UPDATE payees SET name = ? WHERE name = ?").run(to, from);
+  if (!Number(result.changes ?? 0)) throw new SpendableError("No payee with that name.", "not_found", 404);
+  db().prepare("UPDATE payee_keys SET name = ? WHERE name = ?").run(to, from);
+}
+
+export function writePayee(name: string, fields: { favorite: boolean; category: string }): number {
+  const result = db().prepare("UPDATE payees SET favorite = ?, category = ? WHERE name = ?").run(fields.favorite ? 1 : 0, fields.category, name);
+  return Number(result.changes ?? 0);
+}
+
+export function fillPayeeCategory(name: string): void {
+  db()
+    .prepare(
+      `UPDATE transactions SET category = (SELECT category FROM payees WHERE name = ? AND category != '')
+       WHERE category IS NULL AND description IN (SELECT description FROM payee_keys WHERE name = ?)`,
+    )
+    .run(name, name);
+}
+
+export function retargetPayee(from: string, into: string): void {
+  db().prepare("UPDATE payee_keys SET name = ? WHERE name = ?").run(into, from);
+  db().prepare("DELETE FROM payees WHERE name = ?").run(from);
 }
 
 export function applyCategoryRules(): number {

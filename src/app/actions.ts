@@ -16,7 +16,9 @@ import {
   establishPassword,
   listAccounts,
   listCategories,
+  listPayees,
   mergeCategory,
+  mergePayee,
   needsOnboarding,
   passwordIsSet,
   removeBill,
@@ -29,6 +31,7 @@ import {
   sync,
   updateAccount,
   updateCategory,
+  updatePayee,
   updateSettings,
 } from "@/core/service";
 
@@ -243,6 +246,29 @@ export async function deleteCategory(formData: FormData) {
   }
   refresh();
   redirect("/categories");
+}
+
+export async function savePayees(formData: FormData) {
+  await requirePage();
+  try {
+    for (const payee of listPayees()) {
+      if (formData.get(`name:${payee.name}`) == null) continue;
+      const merge = String(formData.get(`merge:${payee.name}`) ?? "");
+      if (merge && merge !== payee.name) {
+        mergePayee(payee.name, merge);
+        continue;
+      }
+      updatePayee(payee.name, {
+        name: String(formData.get(`name:${payee.name}`) ?? ""),
+        favorite: formData.get(`favorite:${payee.name}`) === "1",
+        category: String(formData.get(`category:${payee.name}`) ?? ""),
+      });
+    }
+  } catch (error) {
+    await bail("/payees", error);
+  }
+  refresh();
+  redirect("/payees");
 }
 
 export async function saveTransaction(formData: FormData) {

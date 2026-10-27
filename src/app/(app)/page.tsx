@@ -7,7 +7,7 @@ import { formatLong, formatTimestamp, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
 import { kindLabel } from "@/core/bank";
 import { matchingRule } from "@/core/rules";
-import { getSettings, getSnapshot, listBills, listCategories, listRules } from "@/core/service";
+import { getSettings, getSnapshot, listBills, listCategories, listPayees, listRules } from "@/core/service";
 
 export default async function HomePage({
   searchParams,
@@ -22,6 +22,7 @@ export default async function HomePage({
   const categoryNames = listCategories()
     .filter((category) => !category.hidden)
     .map((category) => category.name);
+  const payeeName = new Map(listPayees().flatMap((payee) => payee.descriptions.map((description) => [description, payee.name] as const)));
   const money = (cents: number) => formatMoney(cents, snapshot.currency);
   const stamps = [...snapshot.deposits.map((account) => account.balanceDate), ...snapshot.debts.map((account) => account.balanceDate)];
   const asOf = stamps.length > 0 ? Math.max(...stamps) : null;
@@ -135,7 +136,7 @@ export default async function HomePage({
                   return (
                     <tr key={txn.id}>
                       <td>
-                        {txn.description}
+                        {payeeName.get(txn.description) ?? txn.description}
                         <span className="quiet-note">
                           {" "}
                           {txn.pending ? "pending" : txn.posted ? formatLong(txn.posted) : "pending"}

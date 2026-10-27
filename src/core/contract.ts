@@ -19,6 +19,8 @@ export const apiContract = {
     { method: "POST", path: "/api/v1/categories", purpose: "Add a category. Body: name." },
     { method: "PATCH", path: "/api/v1/categories/:name", purpose: "Rename, set group, note, or hidden, or merge into another name. Does not change a balance." },
     { method: "DELETE", path: "/api/v1/categories/:name", purpose: "Delete a category. Charges in it become uncategorized. Does not change a balance." },
+    { method: "GET", path: "/api/v1/payees", purpose: "Payees, the bank text they match, which are favorites, and the default category." },
+    { method: "PATCH", path: "/api/v1/payees/:name", purpose: "Rename a payee, mark it favorite, set its default category, or merge it into another. Does not change the bank text or a balance." },
     { method: "GET", path: "/api/v1/settings", purpose: "Payday and buffer." },
     { method: "PATCH", path: "/api/v1/settings", purpose: "Update payday frequency, anchor date, and bufferCents." },
     { method: "GET", path: "/api/v1/connection", purpose: "Whether a bank is connected. Never returns the access URL." },
