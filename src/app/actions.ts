@@ -19,6 +19,7 @@ import {
   removeBill,
   restoreBackup,
   restoreDemo,
+  saveSyncSchedule,
   saveTransactionDetails,
   signIn,
   sync,
@@ -108,6 +109,23 @@ export async function connectBank(formData: FormData) {
   }
   refresh();
   redirect("/?notice=connected");
+}
+
+export async function saveSync(formData: FormData) {
+  await requirePage();
+  const every = formData.get("every");
+  const at = formData.get("at");
+  try {
+    saveSyncSchedule({
+      on: formData.get("on") === "1",
+      ...(every == null ? {} : { everyHours: Number(every) }),
+      ...(at == null ? {} : { at: String(at) }),
+    });
+  } catch (error) {
+    await bail("/bank", error);
+  }
+  refresh();
+  redirect("/bank");
 }
 
 export async function syncBank() {

@@ -10,9 +10,11 @@ import { normalizeContains, type CategoryRule } from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
+import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
 import type { AccountKind, PayMode, Role, Settings, Snapshot } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
+export { syncIsDue, type SyncSchedule };
 export const SESSION_COOKIE = "spendable_session";
 export const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
 
@@ -177,14 +179,41 @@ export function connectionStatus() {
     claimedAt: connection?.claimedAt ?? null,
     syncedAt: connection?.lastSyncAt ?? null,
     errors: connection?.errors ?? [],
+    sync: readSyncSchedule(),
   };
 }
 
+function readSyncSchedule(): SyncSchedule {
+  const hours = Number(store.getMeta("sync_hours", "12"));
+  const at = store.getMeta("sync_at", "");
+  return {
+    on: store.getMeta("sync_on", "1") !== "0",
+    everyHours: (SYNC_HOUR_CHOICES as readonly number[]).includes(hours) ? hours : 12,
+    at: /^([01]\d|2[0-3]):[0-5]\d$/.test(at) ? at : "",
+  };
+}
+
+export function saveSyncSchedule(patch: { on?: boolean; everyHours?: number; at?: string }): SyncSchedule {
+  ready();
+  const current = readSyncSchedule();
+  const everyHours = patch.everyHours ?? current.everyHours;
+  if (!(SYNC_HOUR_CHOICES as readonly number[]).includes(everyHours)) {
+    throw new SpendableError("Not a choice.", "bad_sync");
+  }
+  let at = patch.at ?? current.at;
+  if (at !== "") {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/.exec(at);
+    if (!match) throw new SpendableError("Bad time.", "bad_sync");
+    at = `${match[1]}:${match[2]}`;
+  }
+  store.setMeta("sync_on", (patch.on ?? current.on) ? "1" : "0");
+  store.setMeta("sync_hours", String(everyHours));
+  store.setMeta("sync_at", at);
+  return readSyncSchedule();
+}
+
 export function syncIsStale(syncedAt: string | null, now = Date.now()): boolean {
-  if (!syncedAt) return true;
-  const then = Date.parse(syncedAt);
-  if (!Number.isFinite(then)) return true;
-  return now - then >= SYNC_INTERVAL_MS;
+  return syncIsDue(syncedAt, { on: true, everyHours: SYNC_INTERVAL_MS / 3_600_000, at: "" }, now);
 }
 
 export function listRules(): CategoryRule[] {

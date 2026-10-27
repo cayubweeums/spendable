@@ -19,6 +19,7 @@ export const apiContract = {
     { method: "PATCH", path: "/api/v1/settings", purpose: "Update payday frequency, anchor date, and bufferCents." },
     { method: "GET", path: "/api/v1/connection", purpose: "Whether a bank is connected. Never returns the access URL." },
     { method: "POST", path: "/api/v1/connection", purpose: "Claim a SimpleFIN setup token. Body: setupToken." },
+    { method: "PATCH", path: "/api/v1/connection", purpose: "Turn automatic sync on or off. Body: syncOn, syncEveryHours (1, 6, 12, 24, or 168), syncAt (HH:MM or empty)." },
     { method: "DELETE", path: "/api/v1/connection", purpose: "Forget the saved access URL. Keeps the last copied balances." },
     { method: "POST", path: "/api/v1/sync", purpose: "Copy balances and transactions from SimpleFIN." },
     { method: "GET", path: "/api/v1/backup", purpose: "Download a zip of the server data. The database inside stays encrypted." },
