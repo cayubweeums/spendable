@@ -1,6 +1,7 @@
 export type CategoryRule = {
   contains: string;
   category: string;
+  tag?: string;
 };
 
 export function normalizeContains(input: string): string {

@@ -70,8 +70,20 @@ describe("saving a rule and a monthly bill", () => {
         remember: true,
         billable: true,
         recurring: true,
+        tags: "morning, weekly",
       });
       assert.equal(store.getTransaction("later-coffee")?.category, "Coffee");
+      assert.deepEqual(store.getTransaction(coffee.id)?.tags, ["morning", "weekly"]);
+      assert.deepEqual(store.getTransaction("later-coffee")?.tags, ["morning"]);
+      store.upsertSyncedTransaction({
+        id: "later-coffee",
+        accountId: coffee.accountId,
+        posted: coffee.posted,
+        amountCents: -600,
+        description: "Lane Coffee downtown",
+        pending: false,
+      });
+      assert.deepEqual(store.getTransaction("later-coffee")?.tags, ["morning"]);
       const bill = store.listBills().find((item) => item.matchText === "lane coffee");
       assert.ok(bill);
       assert.equal(bill.active, true);

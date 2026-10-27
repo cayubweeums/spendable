@@ -290,6 +290,7 @@ export async function saveTransaction(formData: FormData) {
       billable: formData.get("billable") === "1",
       recurring: formData.get("recurring") === "1",
       note: String(formData.get("note") ?? ""),
+      tags: String(formData.get("tags") ?? ""),
     });
   } catch (error) {
     await bail("/", error);

@@ -142,6 +142,7 @@ export default async function HomePage({
                           {txn.pending ? "pending" : txn.posted ? formatLong(txn.posted) : "pending"}
                           {txn.category ? ` · ${txn.category}` : null}
                           {txn.note ? ` · ${txn.note}` : null}
+                          {txn.tags.length ? ` · ${txn.tags.join(", ")}` : null}
                           {bill ? " · monthly" : null}
                         </span>
                         <details className="txn-more" suppressHydrationWarning>
@@ -155,6 +156,10 @@ export default async function HomePage({
                             <label>
                               Note
                               <input name="note" defaultValue={txn.note ?? ""} maxLength={280} />
+                            </label>
+                            <label>
+                              Tags
+                              <input name="tags" defaultValue={txn.tags.join(", ")} maxLength={200} />
                             </label>
                             <label>
                               Description contains

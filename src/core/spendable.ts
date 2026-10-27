@@ -218,6 +218,7 @@ export function computeSpendable(input: Input): Snapshot {
       pending: txn.pending,
       category: txn.category,
       note: txn.note ?? "",
+      tags: txn.tags ?? [],
       currency: names.get(txn.accountId)?.currency ?? currency,
     }));
 
