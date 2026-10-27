@@ -1,6 +1,6 @@
 import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { listTransactions, setCategory } from "@/core/service";
+import { listTransactions, setCategory, setNote } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ export async function PATCH(request: Request, context: Context) {
       throw new SpendableError("category should be a string or null.", "bad_category");
     }
     setCategory(id, typeof body.category === "string" ? body.category : null);
+    if (typeof body.note === "string") setNote(id, body.note);
     return { transaction: listTransactions().find((txn) => txn.id === id) ?? null };
   });
 }

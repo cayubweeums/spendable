@@ -2,17 +2,6 @@ import { deleteCategory, saveCategories } from "../../actions";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { listCategories } from "@/core/service";
-import type { Category } from "@/core/types";
-
-function grouped(categories: Category[]): { name: string; items: Category[] }[] {
-  const groups: { name: string; items: Category[] }[] = [];
-  for (const category of categories) {
-    const last = groups.at(-1);
-    if (!last || last.name !== category.group) groups.push({ name: category.group, items: [category] });
-    else last.items.push(category);
-  }
-  return groups;
-}
 
 export default async function CategoriesPage({
   searchParams,
@@ -25,57 +14,71 @@ export default async function CategoriesPage({
     <>
       <ReadFlash notice={query.notice} />
       <h1 className="question">Categories</h1>
-      {grouped(categories).map((group) => (
-        <section className="section stack" key={group.name || "none"}>
-          {group.name ? <h2>{group.name}</h2> : null}
-          {group.items.map((category) => (
-            <fieldset className="account" key={category.name}>
-              <legend>{category.name}</legend>
-              <label>
-                Name
-                <input form="categories" name={`name:${category.name}`} defaultValue={category.name} maxLength={40} required />
-              </label>
-              <label>
-                Group
-                <input form="categories" name={`group:${category.name}`} defaultValue={category.group} maxLength={40} />
-              </label>
-              <label>
-                Note
-                <input form="categories" name={`note:${category.name}`} defaultValue={category.note} maxLength={280} />
-              </label>
-              <label className="check">
-                <input form="categories" type="checkbox" name={`hide:${category.name}`} value="1" defaultChecked={category.hidden} />
-                Hide
-              </label>
-              <label>
-                Merge into
-                <select form="categories" name={`merge:${category.name}`} defaultValue="">
-                  <option value=""></option>
-                  {categories
-                    .filter((other) => other.name !== category.name)
-                    .map((other) => (
-                      <option key={other.name} value={other.name}>
-                        {other.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <form action={deleteCategory}>
-                <button className="quiet" name="name" value={category.name} type="submit">
-                  Delete
-                </button>
-              </form>
-            </fieldset>
-          ))}
-        </section>
-      ))}
-      <form id="categories" className="section stack" action={saveCategories}>
-        <label>
-          New
-          <input name="add" maxLength={40} />
-        </label>
-        <SubmitButton pending="Saving…">Save</SubmitButton>
+      <form action={saveCategories}>
+        <div className="ledger-scroll">
+        <table className="ledger edit">
+          <thead>
+            <tr>
+              <th className="tight"></th>
+              <th>Name</th>
+              <th>Group</th>
+              <th>Note</th>
+              <th className="tight">Hide</th>
+              <th className="tight"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((category, index) => (
+              <tr key={category.name}>
+                <td className="tight">
+                  <input type="checkbox" name="pick" value={category.name} aria-label={`Select ${category.name}`} />
+                </td>
+                <td>
+                  <input name={`name:${category.name}`} defaultValue={category.name} maxLength={40} aria-label={`${category.name} name`} required />
+                </td>
+                <td>
+                  <input name={`group:${category.name}`} defaultValue={category.group} maxLength={40} aria-label={`${category.name} group`} />
+                </td>
+                <td>
+                  <input name={`note:${category.name}`} defaultValue={category.note} maxLength={280} aria-label={`${category.name} note`} />
+                </td>
+                <td className="tight">
+                  <input type="checkbox" name={`hide:${category.name}`} value="1" defaultChecked={category.hidden} aria-label={`Hide ${category.name}`} />
+                </td>
+                <td className="tight">
+                  <button className="quiet" form={`drop-category-${index}`} type="submit">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+            <tr>
+              <td className="tight"></td>
+              <td>
+                <input name="add" maxLength={40} aria-label="New" placeholder="New" />
+              </td>
+              <td>
+                <input name="add-group" maxLength={40} aria-label="Group" />
+              </td>
+              <td></td>
+              <td className="tight"></td>
+              <td className="tight"></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <div className="row">
+          <button className="quiet" name="intent" value="merge" type="submit">
+            Merge
+          </button>
+          <SubmitButton pending="Saving…">Save</SubmitButton>
+        </div>
       </form>
+      {categories.map((category, index) => (
+        <form id={`drop-category-${index}`} action={deleteCategory} key={category.name}>
+          <input type="hidden" name="name" value={category.name} />
+        </form>
+      ))}
     </>
   );
 }

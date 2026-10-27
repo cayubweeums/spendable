@@ -308,6 +308,7 @@ export function saveTransactionDetails(input: {
   remember: boolean;
   billable: boolean;
   recurring: boolean;
+  note?: string;
 }): void {
   ready();
   const txn = store.getTransaction(input.id);
@@ -325,6 +326,9 @@ export function saveTransactionDetails(input: {
   }
   store.withTransaction(() => {
     if (store.setTransactionCategory(input.id, category) === 0) {
+      throw new SpendableError("No transaction with that id.", "not_found", 404);
+    }
+    if (input.note != null && store.setTransactionNote(input.id, sanitizeLabel(input.note, 280)) === 0) {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
     if (input.remember && category) {
@@ -453,6 +457,13 @@ export function setCategory(id: string, category: string | null): void {
   ready();
   const cleaned = category == null || category.trim() === "" ? null : sanitizeLabel(category, 40);
   if (store.setTransactionCategory(id, cleaned) === 0) {
+    throw new SpendableError("No transaction with that id.", "not_found", 404);
+  }
+}
+
+export function setNote(id: string, note: string): void {
+  ready();
+  if (store.setTransactionNote(id, sanitizeLabel(note, 280)) === 0) {
     throw new SpendableError("No transaction with that id.", "not_found", 404);
   }
 }

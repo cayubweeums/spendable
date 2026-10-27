@@ -14,7 +14,7 @@ export const apiContract = {
     { method: "POST", path: "/api/v1/bills", purpose: "Add a bill. Body: name, amountCents, dueDay." },
     { method: "DELETE", path: "/api/v1/bills/:id", purpose: "Remove a bill." },
     { method: "GET", path: "/api/v1/transactions", purpose: "Transactions copied from the bank. Optional ?since=YYYY-MM-DD." },
-    { method: "PATCH", path: "/api/v1/transactions/:id", purpose: "Set or clear a category label. Does not change the balance." },
+    { method: "PATCH", path: "/api/v1/transactions/:id", purpose: "Set or clear a category label, or keep a note. Does not change the balance." },
     { method: "GET", path: "/api/v1/categories", purpose: "Categories, their groups, notes, and which are hidden." },
     { method: "POST", path: "/api/v1/categories", purpose: "Add a category. Body: name." },
     { method: "PATCH", path: "/api/v1/categories/:name", purpose: "Rename, set group, note, or hidden, or merge into another name. Does not change a balance." },

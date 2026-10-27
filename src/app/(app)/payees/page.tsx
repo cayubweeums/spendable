@@ -16,44 +16,49 @@ export default async function PayeesPage({
       <ReadFlash notice={query.notice} />
       <h1 className="question">Payees</h1>
       <form action={savePayees}>
-        {payees.map((payee) => (
-          <fieldset className="account" key={payee.name}>
-            <legend>{payee.name}</legend>
-            <label>
-              Name
-              <input name={`name:${payee.name}`} defaultValue={payee.name} maxLength={180} required />
-            </label>
-            <label className="check">
-              <input type="checkbox" name={`favorite:${payee.name}`} value="1" defaultChecked={payee.favorite} />
-              Favorite
-            </label>
-            <label>
-              Category
-              <select name={`category:${payee.name}`} defaultValue={payee.category}>
-                <option value=""></option>
-                {categories.map((category) => (
-                  <option key={category.name} value={category.name}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Merge into
-              <select name={`merge:${payee.name}`} defaultValue="">
-                <option value=""></option>
-                {payees
-                  .filter((other) => other.name !== payee.name)
-                  .map((other) => (
-                    <option key={other.name} value={other.name}>
-                      {other.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          </fieldset>
-        ))}
-        <SubmitButton pending="Saving…">Save</SubmitButton>
+        <div className="ledger-scroll">
+        <table className="ledger edit">
+          <thead>
+            <tr>
+              <th className="tight"></th>
+              <th>Name</th>
+              <th className="tight">Favorite</th>
+              <th>Category</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payees.map((payee) => (
+              <tr key={payee.name}>
+                <td className="tight">
+                  <input type="checkbox" name="pick" value={payee.name} aria-label={`Select ${payee.name}`} />
+                </td>
+                <td>
+                  <input name={`name:${payee.name}`} defaultValue={payee.name} maxLength={180} aria-label={`${payee.name} name`} required />
+                </td>
+                <td className="tight">
+                  <input type="checkbox" name={`favorite:${payee.name}`} value="1" defaultChecked={payee.favorite} aria-label={`Favorite ${payee.name}`} />
+                </td>
+                <td>
+                  <select name={`category:${payee.name}`} defaultValue={payee.category} aria-label={`${payee.name} category`}>
+                    <option value=""></option>
+                    {categories.map((category) => (
+                      <option key={category.name} value={category.name}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        <div className="row">
+          <button className="quiet" name="intent" value="merge" type="submit">
+            Merge
+          </button>
+          <SubmitButton pending="Saving…">Save</SubmitButton>
+        </div>
       </form>
     </>
   );

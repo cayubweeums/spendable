@@ -30,6 +30,15 @@ test("bills and labels leave copied balances alone", async () => {
     assert.ok(coffee);
     service.createBill({ name: "Extra", amountCents: 2_500, dueDay: new Date().getDate() });
     service.setCategory(coffee.id, "Latte");
+    service.saveTransactionDetails({
+      id: coffee.id,
+      category: "Latte",
+      contains: "lane coffee",
+      remember: false,
+      billable: false,
+      recurring: false,
+      note: "Morning",
+    });
     service.updateSettings({ bufferCents: snapshot.demo ? service.getSettings().bufferCents : 0 });
     const after = store.listAccounts().map((account) => [account.id, account.balanceCents, account.availableCents]);
     assert.deepEqual(after, before);
@@ -44,6 +53,7 @@ test("bills and labels leave copied balances alone", async () => {
       pending: false,
     });
     assert.equal(store.listTransactions().find((txn) => txn.id === coffee.id)?.category, "Latte");
+    assert.equal(store.listTransactions().find((txn) => txn.id === coffee.id)?.note, "Morning");
 
     const checking = store.getAccount("demo_checking");
     assert.ok(checking);

@@ -214,21 +214,26 @@ export async function saveAccounts(formData: FormData) {
 export async function saveCategories(formData: FormData) {
   await requirePage();
   try {
-    const add = String(formData.get("add") ?? "").trim();
-    if (add) createCategory(add);
-    for (const category of listCategories()) {
-      if (formData.get(`name:${category.name}`) == null) continue;
-      const merge = String(formData.get(`merge:${category.name}`) ?? "");
-      if (merge && merge !== category.name) {
-        mergeCategory(category.name, merge);
-        continue;
+    if (formData.get("intent") === "merge") {
+      const picked = formData.getAll("pick").map(String).filter(Boolean);
+      const [into, ...rest] = picked;
+      if (!into || rest.length === 0) throw new SpendableError("Pick another category.", "bad_category");
+      for (const name of rest) mergeCategory(name, into);
+    } else {
+      const add = String(formData.get("add") ?? "").trim();
+      if (add) {
+        createCategory(add);
+        updateCategory(add, { group: String(formData.get("add-group") ?? "") });
       }
-      updateCategory(category.name, {
-        name: String(formData.get(`name:${category.name}`) ?? ""),
-        group: String(formData.get(`group:${category.name}`) ?? ""),
-        note: String(formData.get(`note:${category.name}`) ?? ""),
-        hidden: formData.get(`hide:${category.name}`) === "1",
-      });
+      for (const category of listCategories()) {
+        if (formData.get(`name:${category.name}`) == null) continue;
+        updateCategory(category.name, {
+          name: String(formData.get(`name:${category.name}`) ?? ""),
+          group: String(formData.get(`group:${category.name}`) ?? ""),
+          note: String(formData.get(`note:${category.name}`) ?? ""),
+          hidden: formData.get(`hide:${category.name}`) === "1",
+        });
+      }
     }
   } catch (error) {
     await bail("/categories", error);
@@ -251,18 +256,20 @@ export async function deleteCategory(formData: FormData) {
 export async function savePayees(formData: FormData) {
   await requirePage();
   try {
-    for (const payee of listPayees()) {
-      if (formData.get(`name:${payee.name}`) == null) continue;
-      const merge = String(formData.get(`merge:${payee.name}`) ?? "");
-      if (merge && merge !== payee.name) {
-        mergePayee(payee.name, merge);
-        continue;
+    if (formData.get("intent") === "merge") {
+      const picked = formData.getAll("pick").map(String).filter(Boolean);
+      const [into, ...rest] = picked;
+      if (!into || rest.length === 0) throw new SpendableError("Pick another payee.", "bad_payee");
+      for (const name of rest) mergePayee(name, into);
+    } else {
+      for (const payee of listPayees()) {
+        if (formData.get(`name:${payee.name}`) == null) continue;
+        updatePayee(payee.name, {
+          name: String(formData.get(`name:${payee.name}`) ?? ""),
+          favorite: formData.get(`favorite:${payee.name}`) === "1",
+          category: String(formData.get(`category:${payee.name}`) ?? ""),
+        });
       }
-      updatePayee(payee.name, {
-        name: String(formData.get(`name:${payee.name}`) ?? ""),
-        favorite: formData.get(`favorite:${payee.name}`) === "1",
-        category: String(formData.get(`category:${payee.name}`) ?? ""),
-      });
     }
   } catch (error) {
     await bail("/payees", error);
@@ -282,6 +289,7 @@ export async function saveTransaction(formData: FormData) {
       remember: formData.get("remember") === "1",
       billable: formData.get("billable") === "1",
       recurring: formData.get("recurring") === "1",
+      note: String(formData.get("note") ?? ""),
     });
   } catch (error) {
     await bail("/", error);

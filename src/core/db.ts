@@ -45,6 +45,7 @@ type TransactionRow = {
   description: string;
   pending: number;
   category: string | null;
+  note?: string;
 };
 
 type ConnectionRow = {
@@ -299,6 +300,9 @@ function ensureColumns(database: DatabaseSync): void {
   }
   if (!accounts.has("note")) {
     database.exec("ALTER TABLE accounts ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
+  if (!tableColumns(database, "transactions").has("note")) {
+    database.exec("ALTER TABLE transactions ADD COLUMN note TEXT NOT NULL DEFAULT ''");
   }
   if (!tableColumns(database, "bills").has("match_text")) {
     database.exec("ALTER TABLE bills ADD COLUMN match_text TEXT");
@@ -564,6 +568,7 @@ export function listTransactions(): Transaction[] {
     description: row.description,
     pending: row.pending === 1,
     category: row.category,
+    note: row.note ?? "",
   }));
 }
 
@@ -576,7 +581,7 @@ export function insertTransaction(txn: Transaction): void {
     .run(txn.id, txn.accountId, txn.posted, txn.amountCents, txn.description, txn.pending ? 1 : 0, txn.category);
 }
 
-export function upsertSyncedTransaction(txn: Omit<Transaction, "category">): void {
+export function upsertSyncedTransaction(txn: Omit<Transaction, "category" | "note">): void {
   db()
     .prepare(
       `INSERT INTO transactions (id, account_id, posted, amount_cents, description, pending, category)
@@ -621,6 +626,7 @@ export function getTransaction(id: string): Transaction | null {
     description: row.description,
     pending: row.pending === 1,
     category: row.category,
+    note: row.note ?? "",
   };
 }
 
@@ -827,6 +833,11 @@ export function deactivateRecurringBill(matchText: string): void {
 export function setTransactionCategory(id: string, category: string | null): number {
   const result = db().prepare("UPDATE transactions SET category = ? WHERE id = ?").run(category, id);
   if (category) db().prepare("INSERT INTO categories (name) VALUES (?) ON CONFLICT(name) DO NOTHING").run(category);
+  return Number(result.changes ?? 0);
+}
+
+export function setTransactionNote(id: string, note: string): number {
+  const result = db().prepare("UPDATE transactions SET note = ? WHERE id = ?").run(note, id);
   return Number(result.changes ?? 0);
 }
 
