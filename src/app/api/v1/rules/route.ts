@@ -1,12 +1,12 @@
 import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { listMatchRules, saveRules, type RuleInput } from "@/core/service";
+import { learnRules, listMatchRules, saveRules, setLearnRules, type RuleInput } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export function GET(request: Request) {
-  return guard(request, () => ({ rules: listMatchRules() }));
+  return guard(request, () => ({ rules: listMatchRules(), learn: learnRules() }));
 }
 
 export function PUT(request: Request) {
@@ -27,6 +27,7 @@ export function PUT(request: Request) {
         actionValue: typeof row.actionValue === "string" ? row.actionValue : "",
       };
     });
-    return { rules: saveRules(rules) };
+    if (typeof body.learn === "boolean") setLearnRules(body.learn);
+    return { rules: saveRules(rules), learn: learnRules() };
   });
 }

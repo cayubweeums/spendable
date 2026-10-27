@@ -280,6 +280,53 @@ export function listMatchRules(): MatchRule[] {
   return store.listMatchRules();
 }
 
+export function learnRules(): boolean {
+  ready();
+  return store.getMeta("learn_rules", "1") !== "0";
+}
+
+export function setLearnRules(on: boolean): void {
+  ready();
+  store.setMeta("learn_rules", on ? "1" : "0");
+}
+
+// shortcut: one exact rule, appended. A rename does not add one. Clearing the category leaves the rule.
+function learnMatch(field: "imported_payee" | "payee", value: string, category: string): void {
+  if (store.getMeta("learn_rules", "1") === "0") return;
+  const cleaned = sanitizeLabel(value, 180);
+  if (!cleaned) return;
+  const rules = store.listMatchRules();
+  const found = rules.find(
+    (rule) =>
+      rule.stage === "after" &&
+      rule.field === field &&
+      rule.op === "is" &&
+      rule.action === "category" &&
+      rule.value.toLowerCase() === cleaned.toLowerCase(),
+  );
+  if (found?.actionValue !== category) {
+    const next = found
+      ? rules.map((rule) => (rule.id === found.id ? { ...rule, actionValue: category } : rule))
+      : [
+          ...rules,
+          normalizeRule(
+            {
+              stage: "after",
+              field,
+              op: "is",
+              value: cleaned,
+              action: "category",
+              actionValue: category,
+              ord: rules.reduce((max, rule) => Math.max(max, rule.ord), 0) + 1,
+            },
+            rules.length,
+          ),
+        ];
+    store.replaceMatchRules(next);
+  }
+  store.applyMatchRules("after");
+}
+
 export function saveRules(input: RuleInput[]): MatchRule[] {
   ready();
   const rules = input.map((rule, index) => normalizeRule(rule, index));
@@ -413,6 +460,7 @@ export function saveTransactionDetails(input: {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
     if (tags != null) store.setTransactionTags(input.id, tags);
+    if (category) learnMatch("imported_payee", txn.description, category);
     if (input.remember && category) {
       store.upsertRule(contains, category, tags == null ? undefined : (tags[0] ?? ""));
       store.applyCategoryRules();
@@ -522,6 +570,7 @@ export function updatePayee(name: string, patch: { name?: string; favorite?: boo
     if (category) {
       store.insertCategory(category);
       store.fillPayeeCategory(nextName);
+      learnMatch("payee", nextName, category);
     }
   });
 }
@@ -537,10 +586,13 @@ export function mergePayee(from: string, into: string): void {
 
 export function setCategory(id: string, category: string | null): void {
   ready();
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
   const cleaned = category == null || category.trim() === "" ? null : sanitizeLabel(category, 40);
   if (store.setTransactionCategory(id, cleaned) === 0) {
     throw new SpendableError("No transaction with that id.", "not_found", 404);
   }
+  if (cleaned) learnMatch("imported_payee", txn.description, cleaned);
 }
 
 export function setNote(id: string, note: string): void {

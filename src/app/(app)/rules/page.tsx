@@ -1,7 +1,7 @@
 import { deleteRule, saveRules } from "../../actions";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
-import { listMatchRules } from "@/core/service";
+import { learnRules, listMatchRules } from "@/core/service";
 import { RULE_ACTIONS, RULE_FIELDS, RULE_OPS, RULE_STAGES, type MatchRule } from "@/core/rules";
 
 function Choice({
@@ -64,6 +64,7 @@ export default async function RulesPage({
 }) {
   const query = await searchParams;
   const rules = listMatchRules();
+  const learn = learnRules();
   return (
     <>
       <ReadFlash notice={query.notice} />
@@ -102,6 +103,10 @@ export default async function RulesPage({
           </table>
         </div>
         <div className="row">
+          <label className="check">
+            <input type="checkbox" name="learn" value="1" defaultChecked={learn} />
+            Learn
+          </label>
           <SubmitButton pending="Saving…">Save</SubmitButton>
         </div>
       </form>

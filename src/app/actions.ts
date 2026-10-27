@@ -27,6 +27,7 @@ import {
   restoreBackup,
   restoreDemo,
   saveRules as writeRules,
+  setLearnRules,
   saveSyncSchedule,
   saveTransactionDetails,
   signIn,
@@ -363,6 +364,7 @@ export async function saveRules(formData: FormData) {
       });
     }
     writeRules(rules);
+    setLearnRules(formData.get("learn") === "1");
   } catch (error) {
     await bail("/rules", error);
   }
