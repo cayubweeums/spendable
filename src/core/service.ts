@@ -5,6 +5,7 @@ import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { decimalToCents } from "./money";
 import { hashPassword, passwordMatches } from "./password";
+import { unzipDatabase, zipDatabase } from "./zip";
 import { normalizeContains, type CategoryRule } from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
@@ -87,6 +88,14 @@ export function closeSession(token: string | null | undefined): void {
   }
   if (token) store.deleteSession(token);
   store.lock();
+}
+
+export function downloadBackup(): Buffer {
+  return zipDatabase(store.readDatabaseFile());
+}
+
+export function restoreBackup(bytes: Buffer): void {
+  store.replaceDatabase(unzipDatabase(bytes));
 }
 
 export function ready(): void {

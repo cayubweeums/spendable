@@ -192,6 +192,25 @@ export function lock(): void {
   globalForDb.txDepth = 0;
 }
 
+export function readDatabaseFile(): Buffer {
+  if (globalForDb.spendableKey) persistUnlocked();
+  const file = databasePath();
+  if (!fs.existsSync(/*turbopackIgnore: true*/ file)) throw new SpendableError("There is no data to download.", "no_data");
+  return fs.readFileSync(/*turbopackIgnore: true*/ file);
+}
+
+export function replaceDatabase(bytes: Buffer): void {
+  const header = bytes.subarray(0, 15).toString("utf8");
+  if (!isSeal(bytes) && header !== "SQLite format 3") {
+    throw new SpendableError("That zip does not contain a spendable database.", "bad_backup");
+  }
+  lock();
+  const file = databasePath();
+  atomicWrite(file, bytes);
+  fs.rmSync(`${file}-wal`, { force: true });
+  fs.rmSync(`${file}-shm`, { force: true });
+}
+
 export function db(): DatabaseSync {
   if (!globalForDb.spendableDb) {
     const file = databasePath();

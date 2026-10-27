@@ -21,5 +21,7 @@ export const apiContract = {
     { method: "POST", path: "/api/v1/connection", purpose: "Claim a SimpleFIN setup token. Body: setupToken." },
     { method: "DELETE", path: "/api/v1/connection", purpose: "Forget the saved access URL. Keeps the last copied balances." },
     { method: "POST", path: "/api/v1/sync", purpose: "Copy balances and transactions from SimpleFIN." },
+    { method: "GET", path: "/api/v1/backup", purpose: "Download a zip of the server data. The database inside stays encrypted." },
+    { method: "POST", path: "/api/v1/backup", purpose: "Replace the server data with a zip from GET /api/v1/backup. The current session ends." },
   ],
 } as const;
