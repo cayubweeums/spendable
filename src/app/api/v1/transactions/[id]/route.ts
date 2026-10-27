@@ -1,6 +1,6 @@
 import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { listTransactions, setCategory, setNote, setSplits, setTags } from "@/core/service";
+import { editCharge, listTransactions } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,10 +14,13 @@ export async function PATCH(request: Request, context: Context) {
     if (body.category != null && typeof body.category !== "string") {
       throw new SpendableError("category should be a string or null.", "bad_category");
     }
+    const note = typeof body.note === "string" ? body.note : undefined;
+    const tags = typeof body.tags === "string" ? body.tags : undefined;
     if (Array.isArray(body.splits)) {
-      setSplits(
-        id,
-        body.splits.map((item) => {
+      editCharge(id, {
+        note,
+        tags,
+        splits: body.splits.map((item) => {
           if (!item || typeof item !== "object") throw new SpendableError("A split needs a category.", "bad_split");
           const row = item as { category?: unknown; amount?: unknown };
           if (typeof row.category !== "string" || (typeof row.amount !== "string" && typeof row.amount !== "number")) {
@@ -25,12 +28,10 @@ export async function PATCH(request: Request, context: Context) {
           }
           return { category: row.category, amount: String(row.amount) };
         }),
-      );
+      });
     } else {
-      setCategory(id, typeof body.category === "string" ? body.category : null);
+      editCharge(id, { category: typeof body.category === "string" ? body.category : null, note, tags });
     }
-    if (typeof body.note === "string") setNote(id, body.note);
-    if (typeof body.tags === "string") setTags(id, body.tags);
     return { transaction: listTransactions().find((txn) => txn.id === id) ?? null };
   });
 }

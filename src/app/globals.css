@@ -212,6 +212,22 @@ main {
 
 .lists .kicker { color: var(--brass); font-weight: 500; }
 
+.charge-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.charge-head .kicker { margin: 0; }
+
+.charge-head button.quiet {
+  font-family: var(--font-figures);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
 .lists table.ledger { table-layout: auto; }
 
 .lists table.ledger td.hide-sm { white-space: nowrap; font-size: 0.9rem; }
