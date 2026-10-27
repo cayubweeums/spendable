@@ -2,13 +2,15 @@ function indent(nesting) {
   return "  ".repeat(Math.max(0, nesting));
 }
 
-function errorText(error) {
-  if (!error) return "failed";
+function errorText(error, depth = 0) {
+  if (!error || depth > 6) return "failed";
   if (typeof error === "string") return error;
-  const cause = error.cause && typeof error.cause === "object" ? error.cause : null;
-  const message = error.message || cause?.message || "failed";
-  const stack = error.stack || cause?.stack || "";
-  return stack && !stack.includes(message) ? `${message}\n${stack}` : stack || message;
+  const message = error.message || "failed";
+  const stack = typeof error.stack === "string" ? error.stack : "";
+  const own = stack && !stack.includes(message) ? `${message}\n${stack}` : stack || message;
+  const cause = error.cause;
+  if (!cause) return own;
+  return `${own}\ncaused by: ${errorText(cause, depth + 1)}`;
 }
 
 export default async function* verboseReporter(source) {
@@ -55,8 +57,12 @@ export default async function* verboseReporter(source) {
 
     if (event.type === "test:fail" && kind === "suite") {
       failed += 1;
-      failures.push({ file, name: data.name, text: errorText(data.details?.error) });
+      const text = errorText(data.details?.error);
+      failures.push({ file, name: data.name, text });
       yield `${indent(data.nesting ?? 0)}fail  ${data.name}\n`;
+      for (const line of text.split("\n")) {
+        yield `${indent((data.nesting ?? 0) + 1)}${line}\n`;
+      }
     }
 
     if (event.type === "test:diagnostic") {
