@@ -41,6 +41,13 @@ export type Transaction = {
   category: string | null;
 };
 
+export type Category = {
+  name: string;
+  group: string;
+  note: string;
+  hidden: boolean;
+};
+
 export type Settings = {
   paydayFrequency: PaydayFrequency;
   paydayAnchor: string;

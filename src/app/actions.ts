@@ -10,13 +10,17 @@ import {
   connect,
   connectionStatus,
   createBill,
+  createCategory,
   disconnect,
   dollarsToCents,
   establishPassword,
   listAccounts,
+  listCategories,
+  mergeCategory,
   needsOnboarding,
   passwordIsSet,
   removeBill,
+  removeCategory,
   restoreBackup,
   restoreDemo,
   saveSyncSchedule,
@@ -24,6 +28,7 @@ import {
   signIn,
   sync,
   updateAccount,
+  updateCategory,
   updateSettings,
 } from "@/core/service";
 
@@ -201,6 +206,43 @@ export async function saveAccounts(formData: FormData) {
   }
   refresh();
   redirect("/accounts?notice=saved");
+}
+
+export async function saveCategories(formData: FormData) {
+  await requirePage();
+  try {
+    const add = String(formData.get("add") ?? "").trim();
+    if (add) createCategory(add);
+    for (const category of listCategories()) {
+      if (formData.get(`name:${category.name}`) == null) continue;
+      const merge = String(formData.get(`merge:${category.name}`) ?? "");
+      if (merge && merge !== category.name) {
+        mergeCategory(category.name, merge);
+        continue;
+      }
+      updateCategory(category.name, {
+        name: String(formData.get(`name:${category.name}`) ?? ""),
+        group: String(formData.get(`group:${category.name}`) ?? ""),
+        note: String(formData.get(`note:${category.name}`) ?? ""),
+        hidden: formData.get(`hide:${category.name}`) === "1",
+      });
+    }
+  } catch (error) {
+    await bail("/categories", error);
+  }
+  refresh();
+  redirect("/categories");
+}
+
+export async function deleteCategory(formData: FormData) {
+  await requirePage();
+  try {
+    removeCategory(String(formData.get("name") ?? ""));
+  } catch (error) {
+    await bail("/categories", error);
+  }
+  refresh();
+  redirect("/categories");
 }
 
 export async function saveTransaction(formData: FormData) {
