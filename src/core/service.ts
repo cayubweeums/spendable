@@ -251,6 +251,11 @@ function assertCents(value: number, label: string, allowZero = false): number {
   return value;
 }
 
+function accountLabel(label: string | undefined, current: { name: string; label?: string }): string {
+  const next = label == null ? (current.label ?? "") : sanitizeLabel(label, 80);
+  return next === current.name ? "" : next;
+}
+
 export function updateAccount(
   id: string,
   patch: {
@@ -260,6 +265,8 @@ export function updateAccount(
     dueDay?: number | null;
     payMode?: string;
     minimumCents?: number;
+    label?: string;
+    note?: string;
   },
 ): void {
   ready();
@@ -282,6 +289,8 @@ export function updateAccount(
     payMode: patch.payMode == null ? current.payMode : assertPayMode(patch.payMode),
     minimumCents:
       patch.minimumCents == null ? current.minimumCents : assertCents(patch.minimumCents, "Minimum payment", true),
+    label: accountLabel(patch.label, current),
+    note: patch.note == null ? (current.note ?? "") : sanitizeLabel(patch.note, 280),
   };
   store.updateAccountRules(id, next);
 }

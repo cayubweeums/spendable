@@ -47,9 +47,10 @@ test("bills and labels leave copied balances alone", async () => {
 
     const checking = store.getAccount("demo_checking");
     assert.ok(checking);
-    service.updateAccount(checking.id, { role: "reserve" });
+    service.updateAccount(checking.id, { role: "reserve", label: "Rent money", note: "Joint" });
     store.upsertSyncedAccount({
       ...checking,
+      name: "Everyday Checking NEW",
       balanceCents: 100,
       role: "spend",
       dueDay: null,
@@ -59,6 +60,15 @@ test("bills and labels leave copied balances alone", async () => {
     const updated = store.getAccount(checking.id);
     assert.equal(updated?.balanceCents, 100);
     assert.equal(updated?.role, "reserve");
+    assert.equal(updated?.name, "Everyday Checking NEW");
+    assert.equal(updated?.label, "Rent money");
+    assert.equal(updated?.note, "Joint");
+    const shown = service.getSnapshot().deposits.find((account) => account.id === checking.id);
+    assert.equal(shown?.name, "Rent money");
+    assert.equal(shown?.note, "Joint");
+    service.updateAccount(checking.id, { label: "Everyday Checking NEW", note: "   " });
+    assert.equal(store.getAccount(checking.id)?.label, "");
+    assert.equal(store.getAccount(checking.id)?.note, "");
 
     const status = service.connectionStatus();
     assert.equal(status.connected, false);

@@ -80,6 +80,7 @@ export default async function HomePage({
                 <li key={account.id}>
                   <span>
                     {account.name} <span className="quiet-note">{account.orgName}</span>
+                    {account.note ? <small>{account.note}</small> : null}
                     {account.availableCents != null && account.availableCents !== account.ledgerCents ? (
                       <small>Available {money(account.availableCents)}</small>
                     ) : null}
@@ -92,6 +93,7 @@ export default async function HomePage({
                 <li key={account.id}>
                   <span>
                     {account.name} <span className="quiet-note">{account.orgName}</span>
+                    {account.note ? <small>{account.note}</small> : null}
                   </span>
                   <span className="quiet-note">Owed</span>
                   <span className="num">{money(account.owedCents)}</span>

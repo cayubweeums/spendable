@@ -18,6 +18,8 @@ export type Account = {
   minimumCents: number;
   kind?: AccountKind;
   tracked?: boolean;
+  label?: string;
+  note?: string;
 };
 
 export type Bill = {
@@ -78,11 +80,13 @@ export type Snapshot = {
     ledgerCents: number;
     availableCents: number | null;
     balanceDate: number;
+    note: string;
   }[];
   debts: {
     id: string;
     name: string;
     orgName: string;
+    note: string;
     currency: string;
     owedCents: number;
     balanceDate: number;

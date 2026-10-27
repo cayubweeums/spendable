@@ -16,9 +16,6 @@ export default async function AccountsPage({
     <>
       <ReadFlash notice={query.notice} />
       <h1 className="question">Which accounts should this follow?</h1>
-      <p className="page-intro">
-        Checked accounts are included. Checking is spendable. Savings, Roth, Roth IRA, stocks, and other types are not. Followed accounts copy again after 12 hours while this app is open.
-      </p>
       <form action={saveAccounts}>
         {accounts.map((account) => (
           <AccountFields key={account.id} account={account} />

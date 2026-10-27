@@ -1,4 +1,4 @@
-import { kindFromRole } from "./bank";
+import { accountTitle, kindFromRole } from "./bank";
 import { formatMoney, isIsoCurrency } from "./money";
 import {
   addDays,
@@ -92,7 +92,7 @@ export function computeSpendable(input: Input): Snapshot {
     if (account.currency !== currency) {
       lines.push({
         kind: "bank",
-        label: account.name,
+        label: accountTitle(account),
         detail: "Different currency, left out of the total",
         cents: 0,
       });
@@ -108,7 +108,7 @@ export function computeSpendable(input: Input): Snapshot {
           : "Ledger balance, with pending charges taken off";
     lines.push({
       kind: "bank",
-      label: account.name,
+      label: accountTitle(account),
       detail,
       cents: available,
     });
@@ -145,7 +145,7 @@ export function computeSpendable(input: Input): Snapshot {
         when: date,
         line: {
           kind: "sub",
-          label: account.payMode === "full" ? `${account.name} payment` : `${account.name} minimum`,
+          label: account.payMode === "full" ? `${accountTitle(account)} payment` : `${accountTitle(account)} minimum`,
           detail: `Due ${formatLong(date)}`,
           cents: -payment,
           when: date,
@@ -182,7 +182,7 @@ export function computeSpendable(input: Input): Snapshot {
     )
     .map((account) => ({
       id: account.id,
-      name: account.name,
+      name: accountTitle(account),
       orgName: account.orgName,
       role: account.role,
       kind: account.kind ?? kindFromRole(account.role),
@@ -190,17 +190,19 @@ export function computeSpendable(input: Input): Snapshot {
       ledgerCents: account.balanceCents,
       availableCents: account.availableCents,
       balanceDate: account.balanceDate,
+      note: account.note?.trim() ?? "",
     }));
 
   const debts = accounts
     .filter((account) => account.role === "credit")
     .map((account) => ({
       id: account.id,
-      name: account.name,
+      name: accountTitle(account),
       orgName: account.orgName,
       currency: account.currency,
       owedCents: account.balanceCents < 0 ? -account.balanceCents : 0,
       balanceDate: account.balanceDate,
+      note: account.note?.trim() ?? "",
     }));
 
   const names = new Map(accounts.map((account) => [account.id, account]));
