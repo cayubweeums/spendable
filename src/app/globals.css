@@ -379,6 +379,22 @@ table.ledger .num { text-align: right; font-family: var(--font-figures); font-va
 
 table.ledger .out { color: var(--debit); }
 
+table.ledger.edit { table-layout: auto; min-width: 42rem; }
+
+.ledger-scroll { overflow-x: auto; }
+
+table.ledger.edit input:not([type="checkbox"]),
+table.ledger.edit select {
+  width: 100%;
+  max-width: none;
+  padding: 0.15rem 0;
+}
+
+table.ledger.edit th.tight,
+table.ledger.edit td.tight { width: 1%; white-space: nowrap; padding-right: 0.75rem; }
+
+table.ledger.edit input::placeholder { color: var(--ink-soft); }
+
 .quiet-note { color: var(--ink-soft); }
 
 .txn-more { margin-top: 0.35rem; }

@@ -45,7 +45,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Rename an account and keep a note on it
 - [x] Categories, with groups, rename, merge, delete, hide, and notes
 - [x] Payees: rename, merge, favorite, and a default category
-- [ ] Notes on transactions, categories, and accounts
+- [x] Notes on transactions, categories, and accounts
 - [ ] Tags on transactions. A tag is only a label. A rule can set one.
 - [ ] Rules that match imported payee, payee, account, category, date, notes, amount, or tag, then set category, payee, notes, or tag. Rules run in order, before and after import.
 - [ ] Saving a category or payee can create a rule for the next import. That can be turned off.
