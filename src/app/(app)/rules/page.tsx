@@ -2,7 +2,7 @@ import { deleteRule, saveRules } from "../../actions";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { learnRules, listMatchRules } from "@/core/service";
-import { RULE_ACTIONS, RULE_FIELDS, RULE_OPS, RULE_STAGES, type MatchRule } from "@/core/rules";
+import { RULE_ACTIONS, RULE_FIELDS, RULE_OPS, RULE_SOURCES, RULE_STAGES, ruleSource, type MatchRule } from "@/core/rules";
 
 function Choice({
   name,
@@ -29,6 +29,7 @@ function Choice({
 function ruleRow(rule: MatchRule | null, index: number) {
   const prefix = rule ? "" : "add-";
   const label = rule ? `Rule ${index + 1}` : "New";
+  const from = rule ? ruleSource(rule.actionValue) : "";
   return (
     <>
       <td className="tight">
@@ -51,7 +52,17 @@ function ruleRow(rule: MatchRule | null, index: number) {
         <Choice name={`${prefix}action`} value={rule?.action ?? "category"} options={RULE_ACTIONS} label={`${label} set`} />
       </td>
       <td>
-        <input name={`${prefix}to`} defaultValue={rule?.actionValue ?? ""} maxLength={280} aria-label={`${label} to`} />
+        <select name={`${prefix}from`} defaultValue={from} aria-label={`${label} from`}>
+          <option value="">—</option>
+          {RULE_SOURCES.map(([id, text]) => (
+            <option key={id} value={id}>
+              {text}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td>
+        <input name={`${prefix}to`} defaultValue={from ? "" : (rule?.actionValue ?? "")} maxLength={280} aria-label={`${label} to`} />
       </td>
     </>
   );
@@ -80,6 +91,7 @@ export default async function RulesPage({
                 <th>Op</th>
                 <th>Value</th>
                 <th>Set</th>
+                <th>From</th>
                 <th>To</th>
                 <th className="tight"></th>
               </tr>

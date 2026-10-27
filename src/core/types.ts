@@ -41,6 +41,7 @@ export type Transaction = {
   category: string | null;
   note?: string;
   tags?: string[];
+  cleared?: boolean;
 };
 
 export type Category = {
@@ -129,6 +130,7 @@ export type Snapshot = {
     category: string | null;
     note: string;
     tags: string[];
+    cleared: boolean;
     currency: string;
   }[];
 };

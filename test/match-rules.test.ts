@@ -22,6 +22,7 @@ test("rules run in order, before then after, and leave a set field and the bank 
     notes: "",
     amountCents: 0,
     tags: [] as string[],
+    cleared: false,
   };
   assert.equal(ruleMatches({ field: "account", op: "contains", value: "checking" }, { ...blank, account: "Everyday Checking" }), true);
   assert.equal(ruleMatches({ field: "tag", op: "is", value: "big" }, { ...blank, tags: ["Big"] }), true);

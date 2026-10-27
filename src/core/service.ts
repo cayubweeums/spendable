@@ -7,9 +7,11 @@ import { decimalToCents } from "./money";
 import { hashPassword, passwordMatches } from "./password";
 import { unzipDatabase, zipDatabase } from "./zip";
 import {
+  clearedFlag,
   isRuleField,
   normalizeContains,
   RULE_FIELD_OPS,
+  ruleSource,
   type CategoryRule,
   type MatchRule,
   type RuleOp,
@@ -255,12 +257,38 @@ function normalizeRule(input: RuleInput, index: number): MatchRule {
   }
   if (input.op === "contains" && value.length < 2) throw new SpendableError("The match text needs at least two characters.", "bad_rule");
   if (!value) throw new SpendableError("Not a choice.", "bad_rule");
-  if (input.action !== "category" && input.action !== "payee" && input.action !== "notes" && input.action !== "tag") {
+  const templated =
+    Boolean(ruleSource(input.actionValue)) &&
+    (input.action === "notes" ||
+      input.action === "date" ||
+      input.action === "amount" ||
+      input.action === "payee" ||
+      input.action === "cleared");
+  if (
+    input.action !== "category" &&
+    input.action !== "payee" &&
+    input.action !== "notes" &&
+    input.action !== "tag" &&
+    input.action !== "date" &&
+    input.action !== "amount" &&
+    input.action !== "cleared"
+  ) {
     throw new SpendableError("Not a choice.", "bad_rule");
   }
   const cap = input.action === "notes" ? 280 : input.action === "payee" ? 180 : 40;
-  const actionValue = sanitizeLabel(input.actionValue, cap);
+  const actionValue = templated ? `{{${ruleSource(input.actionValue)}}}` : sanitizeLabel(input.actionValue, cap);
   if (!actionValue) throw new SpendableError("Not a choice.", "bad_rule");
+  if (!templated && input.action === "date" && !isISODate(actionValue)) throw new SpendableError("Bad date.", "bad_date");
+  if (!templated && input.action === "amount") {
+    try {
+      decimalToCents(actionValue);
+    } catch {
+      throw new SpendableError("Bad amount.", "bad_amount");
+    }
+  }
+  if (!templated && input.action === "cleared" && clearedFlag(actionValue) === null) {
+    throw new SpendableError("Not a choice.", "bad_rule");
+  }
   const id = sanitizeLabel(input.id ?? "", 80) || randomUUID();
   const ord = typeof input.ord === "number" && Number.isInteger(input.ord) ? input.ord : index;
   return {

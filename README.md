@@ -49,7 +49,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Tags on transactions. A tag is only a label. A rule can set one.
 - [x] Rules that match imported payee, payee, account, category, date, notes, amount, or tag, then set category, payee, notes, or tag. Rules run in order, before and after import.
 - [x] Saving a category or payee can create a rule for the next import. That can be turned off.
-- [ ] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
+- [x] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
 - [ ] Split one transaction across categories
 - [ ] Undo an edit
 - [ ] Filters that stack, and that you can save

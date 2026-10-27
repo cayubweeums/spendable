@@ -219,6 +219,7 @@ export function computeSpendable(input: Input): Snapshot {
       category: txn.category,
       note: txn.note ?? "",
       tags: txn.tags ?? [],
+      cleared: txn.cleared === true,
       currency: names.get(txn.accountId)?.currency ?? currency,
     }));
 
