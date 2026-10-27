@@ -464,14 +464,17 @@ export function saveTransactionDetails(input: {
   recurring: boolean;
   note?: string;
   tags?: string;
+  splits?: { category: string; amount: string }[];
 }): void {
   ready();
   const txn = store.getTransaction(input.id);
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
-  const category = input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
+  const parts = input.splits == null ? null : normalizeSplits(txn.amountCents, input.splits);
+  const splitting = parts != null && parts.length > 0;
+  const category = splitting || input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
   const tags = input.tags == null ? null : parseTags(input.tags);
   const contains = normalizeContains(input.contains || txn.description);
-  if (input.remember && !category) {
+  if (!splitting && input.remember && !category) {
     throw new SpendableError("Add a category before saving that rule.", "bad_category");
   }
   if ((input.remember || input.recurring) && contains.length < 2) {
@@ -488,11 +491,12 @@ export function saveTransactionDetails(input: {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
     if (tags != null) store.setTransactionTags(input.id, tags);
-    if (category) learnMatch("imported_payee", txn.description, category);
-    if (input.remember && category) {
+    if (parts) store.replaceSplits(input.id, parts);
+    if (!splitting && category) learnMatch("imported_payee", txn.description, category);
+    if (!splitting && input.remember && category) {
       store.upsertRule(contains, category, tags == null ? undefined : (tags[0] ?? ""));
       store.applyCategoryRules();
-    } else if (contains) {
+    } else if (!splitting && contains) {
       store.deleteRule(contains);
     }
     if (!input.billable || !contains) return;
@@ -610,6 +614,39 @@ export function mergePayee(from: string, into: string): void {
     throw new SpendableError("No payee with that name.", "not_found", 404);
   }
   store.withTransaction(() => store.retargetPayee(from, into));
+}
+
+function normalizeSplits(
+  parentCents: number,
+  parts: { category: string; amount: string }[],
+): { category: string; amountCents: number }[] {
+  const filled = parts.filter((part) => part.category.trim() !== "" || part.amount.trim() !== "");
+  if (filled.length === 0) return [];
+  if (filled.length < 2) throw new SpendableError("A split needs two parts.", "bad_split");
+  if (parentCents === 0) throw new SpendableError("The parts do not add up.", "bad_split");
+  const sign = parentCents < 0 ? -1 : 1;
+  const rows = filled.map((part) => {
+    const category = sanitizeLabel(part.category, 40);
+    if (!category) throw new SpendableError("A split needs a category.", "bad_split");
+    const cents = dollarsToCents(part.amount, "Amount");
+    if (cents === 0) throw new SpendableError("A split part needs an amount.", "bad_split");
+    return { category, amountCents: sign * Math.abs(cents) };
+  });
+  if (rows.reduce((total, row) => total + row.amountCents, 0) !== parentCents) {
+    throw new SpendableError("The parts do not add up.", "bad_split");
+  }
+  return rows;
+}
+
+export function setSplits(id: string, parts: { category: string; amount: string }[]): void {
+  ready();
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  const rows = normalizeSplits(txn.amountCents, parts);
+  store.withTransaction(() => {
+    store.replaceSplits(id, rows);
+    if (rows.length > 0) store.setTransactionCategory(id, null);
+  });
 }
 
 export function setCategory(id: string, category: string | null): void {

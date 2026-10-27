@@ -339,6 +339,13 @@ function ensureColumns(database: DatabaseSync): void {
       description TEXT PRIMARY KEY,
       name TEXT NOT NULL
     );
+    -- shortcut: parts use the charge's sign and must add up to it. A rule does not resize them.
+    CREATE TABLE IF NOT EXISTS splits (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS match_rules (
       id TEXT PRIMARY KEY,
       ord INTEGER NOT NULL,
@@ -584,6 +591,7 @@ export function deleteBill(id: string): number {
 
 export function listTransactions(): Transaction[] {
   const tags = tagMap();
+  const parts = splitMap();
   const rows = db().prepare("SELECT * FROM transactions ORDER BY posted DESC, description").all() as TransactionRow[];
   return rows.map((row) => ({
     id: row.id,
@@ -596,6 +604,7 @@ export function listTransactions(): Transaction[] {
     note: row.note ?? "",
     tags: tags.get(row.id) ?? [],
     cleared: row.cleared === 1,
+    splits: parts.get(row.id) ?? [],
   }));
 }
 
@@ -635,6 +644,7 @@ function applyPayeeCategory(id: string): void {
          WHERE k.description = transactions.description AND p.category != ''
        )
        WHERE id = ? AND category IS NULL
+         AND NOT EXISTS (SELECT 1 FROM splits WHERE transaction_id = transactions.id)
          AND EXISTS (
            SELECT 1 FROM payee_keys k
            JOIN payees p ON p.name = k.name
@@ -679,7 +689,34 @@ export function getTransaction(id: string): Transaction | null {
     note: row.note ?? "",
     tags: tagMap().get(row.id) ?? [],
     cleared: row.cleared === 1,
+    splits: transactionSplits(row.id),
   };
+}
+
+function splitMap(): Map<string, { category: string; amountCents: number }[]> {
+  const map = new Map<string, { category: string; amountCents: number }[]>();
+  const rows = db().prepare("SELECT transaction_id, category, amount_cents FROM splits ORDER BY rowid").all() as {
+    transaction_id: string;
+    category: string;
+    amount_cents: number;
+  }[];
+  for (const row of rows) {
+    const parts = map.get(row.transaction_id) ?? [];
+    parts.push({ category: row.category, amountCents: row.amount_cents });
+    map.set(row.transaction_id, parts);
+  }
+  return map;
+}
+
+function transactionSplits(id: string): { category: string; amountCents: number }[] {
+  return splitMap().get(id) ?? [];
+}
+
+export function replaceSplits(id: string, parts: { category: string; amountCents: number }[]): void {
+  const database = db();
+  database.prepare("DELETE FROM splits WHERE transaction_id = ?").run(id);
+  const insert = database.prepare("INSERT INTO splits (id, transaction_id, category, amount_cents) VALUES (?, ?, ?, ?)");
+  for (const part of parts) insert.run(randomUUID(), id, part.category, part.amountCents);
 }
 
 export function listRules(): CategoryRule[] {
@@ -766,11 +803,13 @@ export function renameCategory(from: string, to: string): void {
   const result = db().prepare("UPDATE categories SET name = ? WHERE name = ?").run(to, from);
   if (!Number(result.changes ?? 0)) throw new SpendableError("No category with that name.", "not_found", 404);
   db().prepare("UPDATE transactions SET category = ? WHERE category = ?").run(to, from);
+  db().prepare("UPDATE splits SET category = ? WHERE category = ?").run(to, from);
   db().prepare("UPDATE rules SET category = ? WHERE category = ?").run(to, from);
 }
 
 export function retargetCategory(from: string, into: string): void {
   db().prepare("UPDATE transactions SET category = ? WHERE category = ?").run(into, from);
+  db().prepare("UPDATE splits SET category = ? WHERE category = ?").run(into, from);
   db().prepare("UPDATE rules SET category = ? WHERE category = ?").run(into, from);
   db().prepare("DELETE FROM categories WHERE name = ?").run(from);
 }
@@ -843,7 +882,9 @@ export function fillPayeeCategory(name: string): void {
   db()
     .prepare(
       `UPDATE transactions SET category = (SELECT category FROM payees WHERE name = ? AND category != '')
-       WHERE category IS NULL AND description IN (SELECT description FROM payee_keys WHERE name = ?)`,
+       WHERE category IS NULL
+         AND NOT EXISTS (SELECT 1 FROM splits WHERE transaction_id = transactions.id)
+         AND description IN (SELECT description FROM payee_keys WHERE name = ?)`,
     )
     .run(name, name);
 }
@@ -856,7 +897,13 @@ export function retargetPayee(from: string, into: string): void {
 export function applyCategoryRules(): number {
   const rules = listRules();
   if (rules.length === 0) return 0;
-  const rows = db().prepare("SELECT id, description FROM transactions WHERE category IS NULL").all() as {
+  const rows = db()
+    .prepare(
+      `SELECT id, description FROM transactions
+       WHERE category IS NULL
+         AND NOT EXISTS (SELECT 1 FROM splits WHERE transaction_id = transactions.id)`,
+    )
+    .all() as {
     id: string;
     description: string;
   }[];
@@ -1006,6 +1053,9 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
   const rules = listMatchRules().filter((rule) => rule.stage === stage);
   if (rules.length === 0) return 0;
   const tags = tagMap();
+  const splitIds = new Set(
+    (db().prepare("SELECT DISTINCT transaction_id AS id FROM splits").all() as { id: string }[]).map((row) => row.id),
+  );
   const facts = loadRuleFacts(onlyId).map((row) => ({
     id: row.id,
     description: row.description,
@@ -1024,7 +1074,7 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
     for (const fact of facts) {
       if (!ruleMatches(rule, fact)) continue;
       if (rule.action === "category") {
-        if (fact.category) continue;
+        if (fact.category || splitIds.has(fact.id)) continue;
         changed += setTransactionCategory(fact.id, rule.actionValue);
         fact.category = rule.actionValue;
         continue;
@@ -1056,6 +1106,7 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
         continue;
       }
       if (rule.action === "amount") {
+        if (splitIds.has(fact.id)) continue;
         let cents = fact.amountCents;
         if (ruleSource(rule.actionValue) !== "amount") {
           try {
@@ -1098,6 +1149,7 @@ export function fillEmptyPayeeCategories(): void {
          WHERE k.description = transactions.description AND p.category != ''
        )
        WHERE category IS NULL
+         AND NOT EXISTS (SELECT 1 FROM splits WHERE transaction_id = transactions.id)
          AND EXISTS (
            SELECT 1 FROM payee_keys k
            JOIN payees p ON p.name = k.name
@@ -1157,7 +1209,7 @@ export function deleteConnection(): void {
 
 export function wipeFinancialRows(): void {
   db().exec(
-    "DELETE FROM match_rules; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
+    "DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
   );
 }
 

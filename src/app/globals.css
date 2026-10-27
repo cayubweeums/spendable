@@ -421,6 +421,16 @@ table.ledger.edit input::placeholder { color: var(--ink-soft); }
 
 .txn-more input:not([type="checkbox"]) { width: min(16rem, 100%); }
 
+.txn-more .split {
+  display: flex;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.txn-more .split label:first-child { flex: 0 0 6rem; }
+
+.txn-more .split input { width: 100%; }
+
 .page-intro { max-width: 40rem; margin: 0 0 1.5rem; }
 
 .stack { display: grid; gap: 1.25rem; }

@@ -140,7 +140,11 @@ export default async function HomePage({
                         <span className="quiet-note">
                           {" "}
                           {txn.pending ? "pending" : txn.posted ? formatLong(txn.posted) : "pending"}
-                          {txn.category ? ` · ${txn.category}` : null}
+                          {txn.splits.length
+                            ? txn.splits.map((part) => ` · ${part.category} ${formatMoney(part.amountCents, txn.currency)}`)
+                            : txn.category
+                              ? ` · ${txn.category}`
+                              : null}
                           {txn.note ? ` · ${txn.note}` : null}
                           {txn.tags.length ? ` · ${txn.tags.join(", ")}` : null}
                           {txn.cleared ? " · cleared" : null}
@@ -154,6 +158,33 @@ export default async function HomePage({
                               Category
                               <input name="category" list="categories" defaultValue={txn.category ?? ""} maxLength={40} />
                             </label>
+                            {Array.from({ length: Math.max(txn.splits.length + (txn.splits.length >= 2 ? 1 : 0), 2) }, (_, index) => {
+                              const part = txn.splits[index];
+                              return (
+                                <div className="split" key={index}>
+                                  <label>
+                                    {index === 0 ? "Split" : ""}
+                                    <input
+                                      name="split-amount"
+                                      inputMode="decimal"
+                                      defaultValue={part ? (Math.abs(part.amountCents) / 100).toFixed(2) : ""}
+                                      maxLength={20}
+                                      aria-label={`Split ${index + 1} amount`}
+                                    />
+                                  </label>
+                                  <label>
+                                    {index === 0 ? "Category" : ""}
+                                    <input
+                                      name="split-category"
+                                      list="categories"
+                                      defaultValue={part?.category ?? ""}
+                                      maxLength={40}
+                                      aria-label={`Split ${index + 1} category`}
+                                    />
+                                  </label>
+                                </div>
+                              );
+                            })}
                             <label>
                               Note
                               <input name="note" defaultValue={txn.note ?? ""} maxLength={280} />
