@@ -12,6 +12,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  commits:
+    name: commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Check semantic commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          git fetch origin main
+          node scripts/conventional-commit.mjs
+
   verify:
     name: verify
     runs-on: ubuntu-latest
