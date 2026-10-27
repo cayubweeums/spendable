@@ -8,6 +8,7 @@ const links = [
   ["/accounts", "Accounts"],
   ["/categories", "Categories"],
   ["/payees", "Payees"],
+  ["/rules", "Rules"],
   ["/bills", "Bills"],
   ["/bank", "Bank"],
 ] as const;

@@ -5,9 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
 import { SpendableError } from "./errors";
-import { categoryFor, matchingRule, type CategoryRule } from "./rules";
+import { postedToISO, type PaydayFrequency } from "./dates";
+import { categoryFor, matchingRule, ruleMatches, type CategoryRule, type MatchRule, type RuleStage } from "./rules";
 import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
-import type { PaydayFrequency } from "./dates";
 import { isSeal, openSeal, sealPlaintext, sealWithKey } from "./vault";
 
 type AccountRow = {
@@ -333,6 +333,16 @@ function ensureColumns(database: DatabaseSync): void {
       description TEXT PRIMARY KEY,
       name TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS match_rules (
+      id TEXT PRIMARY KEY,
+      ord INTEGER NOT NULL,
+      stage TEXT NOT NULL,
+      field TEXT NOT NULL,
+      op TEXT NOT NULL,
+      value TEXT NOT NULL,
+      action TEXT NOT NULL,
+      action_value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
@@ -603,7 +613,9 @@ export function upsertSyncedTransaction(txn: Omit<Transaction, "category" | "not
          pending = excluded.pending`,
     )
     .run(txn.id, txn.accountId, txn.posted, txn.amountCents, txn.description, txn.pending ? 1 : 0);
+  applyMatchRules("before", txn.id);
   applyPayeeCategory(txn.id);
+  applyMatchRules("after", txn.id);
 }
 
 function applyPayeeCategory(id: string): void {
@@ -892,6 +904,171 @@ export function setTransactionNote(id: string, note: string): number {
   return Number(result.changes ?? 0);
 }
 
+export function listMatchRules(): MatchRule[] {
+  const rows = db()
+    .prepare("SELECT id, ord, stage, field, op, value, action, action_value FROM match_rules ORDER BY ord, id")
+    .all() as {
+    id: string;
+    ord: number;
+    stage: RuleStage;
+    field: MatchRule["field"];
+    op: MatchRule["op"];
+    value: string;
+    action: MatchRule["action"];
+    action_value: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    ord: row.ord,
+    stage: row.stage,
+    field: row.field,
+    op: row.op,
+    value: row.value,
+    action: row.action,
+    actionValue: row.action_value,
+  }));
+}
+
+export function replaceMatchRules(rules: MatchRule[]): void {
+  const database = db();
+  database.exec("DELETE FROM match_rules");
+  const insert = database.prepare(
+    "INSERT INTO match_rules (id, ord, stage, field, op, value, action, action_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+  );
+  for (const rule of rules) {
+    insert.run(rule.id, rule.ord, rule.stage, rule.field, rule.op, rule.value, rule.action, rule.actionValue);
+  }
+}
+
+export function deleteMatchRule(id: string): number {
+  const result = db().prepare("DELETE FROM match_rules WHERE id = ?").run(id);
+  return Number(result.changes ?? 0);
+}
+
+type RuleFactRow = {
+  id: string;
+  description: string;
+  category: string | null;
+  note: string | null;
+  posted: number;
+  amount_cents: number;
+  account_label: string | null;
+  account_name: string | null;
+  payee: string | null;
+};
+
+function loadRuleFacts(onlyId?: string): RuleFactRow[] {
+  return db()
+    .prepare(
+      `SELECT t.id, t.description, t.category, t.note, t.posted, t.amount_cents,
+              a.label AS account_label, a.name AS account_name, k.name AS payee
+       FROM transactions t
+       LEFT JOIN accounts a ON a.id = t.account_id
+       LEFT JOIN payee_keys k ON k.description = t.description
+       ${onlyId ? "WHERE t.id = ?" : ""}`,
+    )
+    .all(...(onlyId ? [onlyId] : [])) as RuleFactRow[];
+}
+
+// shortcut: a rule fills an empty category, note, or tag. A payee changes only while its name is still the bank text.
+function setRulePayee(description: string, next: string): number {
+  if (!description || description === next) return 0;
+  const key = db().prepare("SELECT name FROM payee_keys WHERE description = ?").get(description) as { name: string } | undefined;
+  const current = key?.name ?? description;
+  if (current !== description) return 0;
+  const others = db()
+    .prepare("SELECT COUNT(*) AS n FROM payee_keys WHERE name = ? AND description != ?")
+    .get(current, description) as { n: number };
+  const target = db().prepare("SELECT 1 AS ok FROM payees WHERE name = ?").get(next);
+  if (!target && others.n === 0 && db().prepare("SELECT 1 AS ok FROM payees WHERE name = ?").get(current)) {
+    db().prepare("UPDATE payees SET name = ? WHERE name = ?").run(next, current);
+    if (key) db().prepare("UPDATE payee_keys SET name = ? WHERE description = ?").run(next, description);
+    else db().prepare("INSERT INTO payee_keys (description, name) VALUES (?, ?)").run(description, next);
+    return 1;
+  }
+  db().prepare("INSERT INTO payees (name) VALUES (?) ON CONFLICT(name) DO NOTHING").run(next);
+  if (key) db().prepare("UPDATE payee_keys SET name = ? WHERE description = ? AND name = ?").run(next, description, current);
+  else db().prepare("INSERT INTO payee_keys (description, name) VALUES (?, ?)").run(description, next);
+  db().prepare("DELETE FROM payees WHERE name = ? AND NOT EXISTS (SELECT 1 FROM payee_keys WHERE name = ?)").run(current, current);
+  return 1;
+}
+
+export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
+  const rules = listMatchRules().filter((rule) => rule.stage === stage);
+  if (rules.length === 0) return 0;
+  const tags = tagMap();
+  const facts = loadRuleFacts(onlyId).map((row) => ({
+    id: row.id,
+    description: row.description,
+    importedPayee: row.description,
+    payee: row.payee ?? row.description,
+    account: row.account_label?.trim() || row.account_name || "",
+    category: row.category ?? "",
+    notes: row.note ?? "",
+    date: postedToISO(row.posted) ?? "",
+    amountCents: row.amount_cents,
+    tags: tags.get(row.id) ?? [],
+  }));
+  let changed = 0;
+  for (const rule of rules) {
+    for (const fact of facts) {
+      if (!ruleMatches(rule, fact)) continue;
+      if (rule.action === "category") {
+        if (fact.category) continue;
+        changed += setTransactionCategory(fact.id, rule.actionValue);
+        fact.category = rule.actionValue;
+        continue;
+      }
+      if (rule.action === "notes") {
+        if (fact.notes) continue;
+        changed += setTransactionNote(fact.id, rule.actionValue);
+        fact.notes = rule.actionValue;
+        continue;
+      }
+      if (rule.action === "tag") {
+        if (fact.tags.some((tag) => tag.toLowerCase() === rule.actionValue.toLowerCase())) continue;
+        const result = db()
+          .prepare("INSERT INTO transaction_tags (transaction_id, name) VALUES (?, ?) ON CONFLICT DO NOTHING")
+          .run(fact.id, rule.actionValue);
+        const count = Number(result.changes ?? 0);
+        if (count) fact.tags.push(rule.actionValue);
+        changed += count;
+        continue;
+      }
+      if (setRulePayee(fact.description, rule.actionValue)) {
+        fact.payee = rule.actionValue;
+        changed += 1;
+      }
+    }
+  }
+  return changed;
+}
+
+export function fillEmptyPayeeCategories(): void {
+  db()
+    .prepare(
+      `UPDATE transactions
+       SET category = (
+         SELECT p.category FROM payee_keys k
+         JOIN payees p ON p.name = k.name
+         WHERE k.description = transactions.description AND p.category != ''
+       )
+       WHERE category IS NULL
+         AND EXISTS (
+           SELECT 1 FROM payee_keys k
+           JOIN payees p ON p.name = k.name
+           WHERE k.description = transactions.description AND p.category != ''
+         )`,
+    )
+    .run();
+}
+
+export function applyImportedRules(): void {
+  applyMatchRules("before");
+  fillEmptyPayeeCategories();
+  applyMatchRules("after");
+}
+
 export function getConnection(): { accessUrl: string; claimedAt: string; lastSyncAt: string | null; errors: string[] } | null {
   const row = db().prepare("SELECT access_url, claimed_at, last_sync_at, last_errors FROM connection WHERE id = 1").get() as
     | ConnectionRow
@@ -936,7 +1113,7 @@ export function deleteConnection(): void {
 
 export function wipeFinancialRows(): void {
   db().exec(
-    "DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
+    "DELETE FROM match_rules; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
   );
 }
 

@@ -23,8 +23,10 @@ import {
   passwordIsSet,
   removeBill,
   removeCategory,
+  removeMatchRule,
   restoreBackup,
   restoreDemo,
+  saveRules as writeRules,
   saveSyncSchedule,
   saveTransactionDetails,
   signIn,
@@ -323,6 +325,60 @@ export async function deleteBill(formData: FormData) {
   }
   refresh();
   redirect("/bills?notice=saved");
+}
+
+export async function saveRules(formData: FormData) {
+  await requirePage();
+  try {
+    const ids = formData.getAll("id").map(String);
+    const rules = ids.flatMap((id, index) => {
+      const value = String(formData.getAll("value")[index] ?? "");
+      const actionValue = String(formData.getAll("to")[index] ?? "");
+      if (!value.trim() || !actionValue.trim()) return [];
+      return [
+        {
+          id,
+          ord: Number(formData.getAll("ord")[index]),
+          stage: String(formData.getAll("stage")[index] ?? ""),
+          field: String(formData.getAll("field")[index] ?? ""),
+          op: String(formData.getAll("op")[index] ?? ""),
+          value,
+          action: String(formData.getAll("action")[index] ?? ""),
+          actionValue,
+        },
+      ];
+    });
+    const addValue = String(formData.get("add-value") ?? "");
+    const addTo = String(formData.get("add-to") ?? "");
+    if (addValue.trim() && addTo.trim()) {
+      rules.push({
+        id: "",
+        ord: Number(formData.get("add-ord")),
+        stage: String(formData.get("add-stage") ?? ""),
+        field: String(formData.get("add-field") ?? ""),
+        op: String(formData.get("add-op") ?? ""),
+        value: addValue,
+        action: String(formData.get("add-action") ?? ""),
+        actionValue: addTo,
+      });
+    }
+    writeRules(rules);
+  } catch (error) {
+    await bail("/rules", error);
+  }
+  refresh();
+  redirect("/rules");
+}
+
+export async function deleteRule(formData: FormData) {
+  await requirePage();
+  try {
+    removeMatchRule(String(formData.get("id") ?? ""));
+  } catch (error) {
+    await bail("/rules", error);
+  }
+  refresh();
+  redirect("/rules");
 }
 
 export async function saveSettings(formData: FormData) {
