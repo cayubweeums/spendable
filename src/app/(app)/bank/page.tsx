@@ -1,4 +1,4 @@
-import { connectBank, disconnectBank, loadSample } from "../../actions";
+import { connectBank, disconnectBank, importBackup, loadSample } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
@@ -48,6 +48,22 @@ export default async function BankPage({
         <PendingNote>Claiming the token and copying accounts.</PendingNote>
         <SubmitButton pending="Claiming the token…">Connect</SubmitButton>
       </form>
+      <section className="section stack">
+        <h2>Backup</h2>
+        <p>Download a zip of the data on this server. Import replaces that data. Sign in again with the password from the zip.</p>
+        <p>
+          <a className="button" href="/api/v1/backup">
+            Download zip
+          </a>
+        </p>
+        <form action={importBackup} className="stack">
+          <label>
+            Zip file
+            <input name="backup" type="file" accept=".zip,application/zip" required />
+          </label>
+          <SubmitButton pending="Importing…">Import zip</SubmitButton>
+        </form>
+      </section>
       <div className="section row">
         {status.connected ? (
           <form action={disconnectBank}>

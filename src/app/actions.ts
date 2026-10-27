@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearSession, requirePage, writeSession } from "./auth";
-import { publicErrorMessage } from "@/core/errors";
+import { SpendableError, publicErrorMessage } from "@/core/errors";
 import {
   completeOnboarding,
   connect,
@@ -17,6 +17,7 @@ import {
   needsOnboarding,
   passwordIsSet,
   removeBill,
+  restoreBackup,
   restoreDemo,
   saveTransactionDetails,
   signIn,
@@ -82,6 +83,20 @@ export async function signOut() {
   await clearSession();
   refresh();
   redirect("/login");
+}
+
+export async function importBackup(formData: FormData) {
+  await requirePage();
+  const file = formData.get("backup");
+  try {
+    if (!(file instanceof File) || file.size === 0) throw new SpendableError("Choose a zip file.", "bad_backup");
+    restoreBackup(Buffer.from(await file.arrayBuffer()));
+  } catch (error) {
+    await bail("/bank", error);
+  }
+  await clearSession();
+  refresh();
+  redirect(passwordIsSet() ? "/login" : "/onboarding");
 }
 
 export async function connectBank(formData: FormData) {
