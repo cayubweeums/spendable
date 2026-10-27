@@ -6,7 +6,7 @@ import { AutoSync } from "@/components/auto-sync";
 import { Nav } from "@/components/nav";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncForm } from "@/components/sync-form";
-import { connectionStatus, needsOnboarding, syncIsStale } from "@/core/service";
+import { connectionStatus, needsOnboarding, passwordIsSet, syncIsStale } from "@/core/service";
 import "./globals.css";
 
 const display = Fraunces({
@@ -50,7 +50,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           Skip to content
         </a>
         <header className="site-header">
-          <a className="wordmark" href={!authed ? "/login" : onboarding ? "/onboarding" : "/"}>
+          <a className="wordmark" href={!authed ? (passwordIsSet() ? "/login" : "/onboarding") : onboarding ? "/onboarding" : "/"}>
             spendable
           </a>
           {authed && !onboarding ? <Nav /> : null}

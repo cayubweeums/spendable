@@ -67,16 +67,15 @@ function refresh() {
 
 export async function openApp(formData: FormData) {
   const password = String(formData.get("password") ?? "");
+  const first = !passwordIsSet();
   try {
-    const token = passwordIsSet()
-      ? signIn(password)
-      : establishPassword(password, String(formData.get("confirm") ?? ""));
+    const token = first ? establishPassword(password, String(formData.get("confirm") ?? "")) : signIn(password);
     await writeSession(token);
   } catch (error) {
-    await bail("/login", error);
+    await bail(first ? "/onboarding?step=user" : "/login", error);
   }
   refresh();
-  redirect(needsOnboarding() ? "/onboarding" : "/");
+  redirect(needsOnboarding() ? "/onboarding?step=bank" : "/");
 }
 
 export async function signOut() {
@@ -129,7 +128,7 @@ export async function connectFromOnboarding(formData: FormData) {
     connected = true;
   } catch (error) {
     if (!connected) connected = connectionStatus().connected;
-    await bail(connected ? "/onboarding?step=accounts" : "/onboarding?step=token", error);
+    await bail(connected ? "/onboarding?step=accounts" : "/onboarding?step=bank", error);
   }
   refresh();
   redirect("/onboarding?step=accounts");

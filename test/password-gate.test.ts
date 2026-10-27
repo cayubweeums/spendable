@@ -34,9 +34,15 @@ describe("password gate", { concurrency: 1 }, () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("does not open the ledger while asking for a password", () => {
+  it("does not open the ledger while asking for a password", async () => {
     assert.equal(service.passwordIsSet(), false);
     assert.equal(store.getMeta("initialized"), "");
+    assert.equal(gateDecision({ pathname: "/", method: "GET", signedIn: false, passwordSet: false }), "onboarding");
+    assert.equal(gateDecision({ pathname: "/onboarding", method: "POST", signedIn: false, passwordSet: false }), "next");
+    const { NextRequest } = await import("next/server");
+    const { proxy } = await import("../src/proxy");
+    const first = proxy(new NextRequest("http://127.0.0.1:3000/"));
+    assert.equal(new URL(first.headers.get("location") ?? "", "http://127.0.0.1:3000").pathname, "/onboarding");
   });
 
   it("rejects a short password and a mismatch without saving either", () => {
@@ -83,14 +89,14 @@ describe("password gate", { concurrency: 1 }, () => {
   });
 
   it("sends pages to login and APIs to 401, and leaves sign-in open", async () => {
-    assert.equal(gateDecision({ pathname: "/", method: "GET", signedIn: false }), "login");
-    assert.equal(gateDecision({ pathname: "/onboarding", method: "GET", signedIn: false }), "login");
-    assert.equal(gateDecision({ pathname: "/api/v1/snapshot", method: "GET", signedIn: false }), "unauthorized");
-    assert.equal(gateDecision({ pathname: "/login", method: "POST", signedIn: false }), "next");
-    assert.equal(gateDecision({ pathname: "/icon", method: "GET", signedIn: false }), "next");
-    assert.equal(gateDecision({ pathname: "/api/v1/session", method: "POST", signedIn: false }), "next");
-    assert.equal(gateDecision({ pathname: "/api/v1/flash", method: "DELETE", signedIn: false }), "next");
-    assert.equal(gateDecision({ pathname: "/api/v1/snapshot", method: "GET", signedIn: true }), "next");
+    assert.equal(gateDecision({ pathname: "/", method: "GET", signedIn: false, passwordSet: true }), "login");
+    assert.equal(gateDecision({ pathname: "/onboarding", method: "GET", signedIn: false, passwordSet: true }), "login");
+    assert.equal(gateDecision({ pathname: "/api/v1/snapshot", method: "GET", signedIn: false, passwordSet: true }), "unauthorized");
+    assert.equal(gateDecision({ pathname: "/login", method: "POST", signedIn: false, passwordSet: true }), "next");
+    assert.equal(gateDecision({ pathname: "/icon", method: "GET", signedIn: false, passwordSet: false }), "next");
+    assert.equal(gateDecision({ pathname: "/api/v1/session", method: "POST", signedIn: false, passwordSet: false }), "next");
+    assert.equal(gateDecision({ pathname: "/api/v1/flash", method: "DELETE", signedIn: false, passwordSet: false }), "next");
+    assert.equal(gateDecision({ pathname: "/api/v1/snapshot", method: "GET", signedIn: true, passwordSet: true }), "next");
     assert.equal(cookieValue("spendable_session=abc%3D; theme=dark", "spendable_session"), "abc=");
 
     const { NextRequest } = await import("next/server");
