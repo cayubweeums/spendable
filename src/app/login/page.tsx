@@ -13,7 +13,7 @@ export default async function LoginPage() {
     <div className="wizard">
       <ReadFlash />
       <h1 className="question">Open spendable</h1>
-      <p className="page-intro">Enter the app password.</p>
+      <p className="page-intro">Enter the app password. It decrypts the data for this session.</p>
       <form action={openApp}>
         <label>
           Password

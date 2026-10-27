@@ -39,7 +39,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Compare this pay cycle with the last one
 - [x] Docker install
 - [x] Require a password before the app opens
-- [ ] Encrypt the data with the login password, and decrypt it after login. The server does not keep that key.
+- [x] Encrypt the data with the login password, and decrypt it after login. The server does not keep that key.
 - [ ] Download a zip of the server data, and import that zip later
 - [ ] Turn bank sync on or off, and choose how often it runs and when
 - [ ] Rename an account and keep a note on it

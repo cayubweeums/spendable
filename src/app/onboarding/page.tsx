@@ -77,7 +77,7 @@ export default async function OnboardingPage({
         ) : (
           <>
             <h1 className="question">Setup user</h1>
-            <p className="page-intro">Password for the admin account on this app. The bank password stays at your bank.</p>
+            <p className="page-intro">Password for the admin account on this app. It encrypts the data on this server. The bank password stays at your bank.</p>
             <form action={openApp}>
               <label>
                 Password
