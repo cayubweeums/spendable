@@ -1,16 +1,16 @@
-import { handle, readJson } from "@/core/http";
+import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
 import { connect, connectionStatus, disconnect } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export function GET() {
-  return handle(() => connectionStatus());
+export function GET(request: Request) {
+  return guard(request, () => connectionStatus());
 }
 
 export function POST(request: Request) {
-  return handle(async () => {
+  return guard(request, async () => {
     const body = await readJson(request);
     if (typeof body.setupToken !== "string") {
       throw new SpendableError("setupToken is required.", "bad_token");
@@ -20,8 +20,8 @@ export function POST(request: Request) {
   });
 }
 
-export function DELETE() {
-  return handle(() => {
+export function DELETE(request: Request) {
+  return guard(request, () => {
     disconnect();
     return connectionStatus();
   });

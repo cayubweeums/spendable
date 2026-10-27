@@ -59,6 +59,8 @@ describe("the agent contract", () => {
     const paths = apiContract.routes.map((route) => `${route.method} ${route.path}`);
     assert.ok(paths.includes("GET /api/v1/snapshot"));
     assert.ok(paths.includes("POST /api/v1/sync"));
+    assert.ok(paths.includes("POST /api/v1/session"));
+    assert.ok(paths.includes("DELETE /api/v1/session"));
     assert.equal(paths.some((path) => path.toLowerCase().includes("access")), false);
     assert.match(apiContract.principle, /never write account balances/);
   });

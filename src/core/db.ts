@@ -69,6 +69,10 @@ export function db(): DatabaseSync {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS connection (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         access_url TEXT NOT NULL,
@@ -140,6 +144,10 @@ function ensureColumns(database: DatabaseSync): void {
       contains_text TEXT PRIMARY KEY,
       category TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    );
     CREATE UNIQUE INDEX IF NOT EXISTS bills_match_text ON bills(match_text) WHERE match_text IS NOT NULL;
   `);
   const named = database.prepare("SELECT value FROM meta WHERE key = ?").get("kinds_named") as { value: string } | undefined;
@@ -195,6 +203,22 @@ export function getMeta(key: string, fallback = ""): string {
 
 export function setMeta(key: string, value: string): void {
   db().prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+
+export function insertSession(token: string, expiresAt: number): string {
+  const database = db();
+  database.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Date.now());
+  database.prepare("INSERT INTO sessions (token, expires_at) VALUES (?, ?)").run(token, expiresAt);
+  return token;
+}
+
+export function sessionOpen(token: string, now = Date.now()): boolean {
+  const row = db().prepare("SELECT token FROM sessions WHERE token = ? AND expires_at > ?").get(token, now);
+  return row != null;
+}
+
+export function deleteSession(token: string): void {
+  db().prepare("DELETE FROM sessions WHERE token = ?").run(token);
 }
 
 function mapAccount(row: AccountRow): Account {

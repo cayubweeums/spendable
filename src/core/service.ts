@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
 import { isISODate, localISODate, postedToISO, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { decimalToCents } from "./money";
+import { hashPassword, passwordMatches } from "./password";
 import { normalizeContains, type CategoryRule } from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
@@ -11,6 +12,16 @@ import { computeSpendable } from "./spendable";
 import type { AccountKind, PayMode, Role, Settings, Snapshot } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
+export const SESSION_COOKIE = "spendable_session";
+export const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
+
+// shortcut: session cookie is not marked Secure, set Secure when the app is served over https
+export const sessionCookie = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: SESSION_MAX_AGE_SEC,
+};
 
 const ROLES: Role[] = ["spend", "reserve", "credit", "ignore"];
 const PAY_MODES: PayMode[] = ["full", "minimum", "none"];
@@ -18,6 +29,47 @@ const FREQUENCIES: PaydayFrequency[] = ["weekly", "biweekly", "monthly"];
 
 export function closeDb(): void {
   store.closeDb();
+}
+
+function assertPassword(password: string): void {
+  if (password.length < 8 || password.length > 128) {
+    throw new SpendableError("Use 8 to 128 characters.", "weak_password");
+  }
+}
+
+function startSession(): string {
+  return store.insertSession(randomBytes(32).toString("base64url"), Date.now() + SESSION_MAX_AGE_SEC * 1000);
+}
+
+export function passwordIsSet(): boolean {
+  return store.getMeta("password_hash") !== "";
+}
+
+export function establishPassword(password: string, confirm: string): string {
+  assertPassword(password);
+  if (password !== confirm) throw new SpendableError("Those passwords do not match.", "password_mismatch");
+  return store.withTransaction(() => {
+    if (store.getMeta("password_hash")) throw new SpendableError("A password is already set.", "password_set");
+    store.setMeta("password_hash", hashPassword(password));
+    return startSession();
+  });
+}
+
+// shortcut: wrong passwords are not rate limited, add a delay if this port is reachable beyond the host
+export function signIn(password: string): string {
+  const stored = store.getMeta("password_hash");
+  if (!stored) throw new SpendableError("Choose a password first.", "no_password");
+  if (!passwordMatches(password, stored)) throw new SpendableError("That password is wrong.", "bad_password", 401);
+  return startSession();
+}
+
+export function sessionIsOpen(token: string | null | undefined, now = Date.now()): boolean {
+  if (!token) return false;
+  return store.sessionOpen(token, now);
+}
+
+export function closeSession(token: string | null | undefined): void {
+  if (token) store.deleteSession(token);
 }
 
 export function ready(): void {

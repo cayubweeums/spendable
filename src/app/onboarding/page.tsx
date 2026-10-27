@@ -1,25 +1,26 @@
 import { redirect } from "next/navigation";
-import { connectFromOnboarding, finishOnboarding, syncFromOnboarding } from "../actions";
+import { connectFromOnboarding, finishOnboarding, openApp, syncFromOnboarding } from "../actions";
+import { requirePage } from "../auth";
 import { AccountFields } from "@/components/account-fields";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SetupTokenField } from "@/components/setup-token-field";
 import { SubmitButton } from "@/components/submit-button";
-import { connectionStatus, listAccounts, needsOnboarding } from "@/core/service";
+import { connectionStatus, listAccounts, needsOnboarding, passwordIsSet } from "@/core/service";
 
 const steps = [
-  { id: "start", label: "Start" },
-  { id: "bridge", label: "SimpleFIN" },
-  { id: "token", label: "Token" },
+  { id: "user", label: "User" },
+  { id: "bank", label: "Bank" },
   { id: "accounts", label: "Accounts" },
 ] as const;
 
 type StepId = (typeof steps)[number]["id"];
 
-function currentStep(value: string | undefined, connected: boolean): StepId {
-  if (value === "accounts") return connected ? "accounts" : "token";
-  if (value === "bridge" || value === "token" || value === "start") return value;
-  return connected ? "accounts" : "start";
+function currentStep(value: string | undefined, connected: boolean, passwordSet: boolean): StepId {
+  if (!passwordSet) return "user";
+  if (value === "user" || value === "bank") return value;
+  if (value === "accounts") return connected ? "accounts" : "bank";
+  return connected ? "accounts" : "bank";
 }
 
 export default async function OnboardingPage({
@@ -27,10 +28,16 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ step?: string; notice?: string }>;
 }) {
-  if (!needsOnboarding()) redirect("/");
+  const passwordSet = passwordIsSet();
+  if (passwordSet) {
+    await requirePage();
+    if (!needsOnboarding()) redirect("/");
+  }
   const query = await searchParams;
-  const status = connectionStatus();
-  const step = currentStep(query.step, status.connected);
+  const status = passwordSet
+    ? connectionStatus()
+    : { connected: false, syncedAt: null as string | null, errors: [] as string[] };
+  const step = currentStep(query.step, status.connected, passwordSet);
   const stepIndex = steps.findIndex((item) => item.id === step);
   const accounts = status.connected ? listAccounts() : [];
 
@@ -40,8 +47,8 @@ export default async function OnboardingPage({
       <p className="kicker">Step {stepIndex + 1} of {steps.length}</p>
       <ol className="steps">
         {steps.map((item, index) => {
-          const locked = item.id === "accounts" && !status.connected;
-          const href = item.id === "start" ? "/onboarding" : `/onboarding?step=${item.id}`;
+          const locked = (item.id !== "user" && !passwordSet) || (item.id === "accounts" && !status.connected);
+          const href = item.id === "user" ? "/onboarding?step=user" : `/onboarding?step=${item.id}`;
           return (
             <li key={item.id}>
               {locked ? (
@@ -58,64 +65,78 @@ export default async function OnboardingPage({
         })}
       </ol>
 
-      {step === "start" ? (
-        <>
-          <h1 className="question">Copy the bank before the answer.</h1>
-          <p className="page-intro">
-            SimpleFIN copies your balances. Your bank password stays there. This screen stays until a token is claimed and an account comes back.
-          </p>
-          <a className="button" href="/onboarding?step=bridge">
-            Set up SimpleFIN
-          </a>
-        </>
+      {step === "user" ? (
+        passwordSet ? (
+          <>
+            <h1 className="question">Setup user</h1>
+            <p className="page-intro">Admin password is set.</p>
+            <a className="button" href="/onboarding?step=bank">
+              Setup bank
+            </a>
+          </>
+        ) : (
+          <>
+            <h1 className="question">Setup user</h1>
+            <p className="page-intro">Password for the admin account on this app. The bank password stays at your bank.</p>
+            <form action={openApp}>
+              <label>
+                Password
+                <input name="password" type="password" autoComplete="new-password" required minLength={8} maxLength={128} autoFocus />
+              </label>
+              <label>
+                Confirm password
+                <input name="confirm" type="password" autoComplete="new-password" required minLength={8} maxLength={128} />
+              </label>
+              <div className="actions">
+                <SubmitButton pending="Saving…">Save</SubmitButton>
+              </div>
+            </form>
+          </>
+        )
       ) : null}
 
-      {step === "bridge" ? (
-        <>
-          <h1 className="question">Create a one-time setup token.</h1>
-          <ol className="bridge">
-            <li>
-              Create an account at{" "}
-              <a href="https://beta-bridge.simplefin.org/" target="_blank" rel="noreferrer">
-                SimpleFIN Bridge
-              </a>
-              . Choose Get Started and enter your email.
-            </li>
-            <li>Open the login link in that email. It can take a few minutes to arrive.</li>
-            <li>Accept the terms on the first login. You land on My Account.</li>
-            <li>
-              Link the banks you want under Financial Institutions, then New Connection. SimpleFIN requires a subscription before the first bank. Their current rate is $1.50 a month, or $15 a year.
-            </li>
-            <li>
-              On My Account, under Apps, choose New Connection. The name is only so you can recognize this app in SimpleFIN. Then choose Create Setup Token.
-            </li>
-            <li>Copy the token. It can be claimed once. If this app refuses it, disable that connection and create another token.</li>
-          </ol>
-          <p className="page-intro">
-            SimpleFIN refreshes each bank about once a day, and a copy here asks for at most 90 days of transactions. To try a fake bank first, the{" "}
-            <a href="https://beta-bridge.simplefin.org/info/developers" target="_blank" rel="noreferrer">
-              developer page
-            </a>{" "}
-            prints a demo token.
-          </p>
-          <a className="button" href="/onboarding?step=token">
-            I have a token
-          </a>
-        </>
-      ) : null}
-
-      {step === "token" ? (
-        <>
-          <h1 className="question">Paste the token.</h1>
-          <p className="page-intro">
-            Save and continue claims this token with SimpleFIN and copies the accounts. You will not be asked for it again. If the claim is refused, the access URL is not saved.
-          </p>
-          <form action={connectFromOnboarding} className="stack">
-            <SetupTokenField />
-            <PendingNote>Claiming the token and copying accounts.</PendingNote>
-            <SubmitButton pending="Claiming the token…">Save and continue</SubmitButton>
-          </form>
-        </>
+      {step === "bank" ? (
+        status.connected ? (
+          <>
+            <h1 className="question">Setup bank</h1>
+            <p className="page-intro">Token claimed.</p>
+            <a className="button" href="/onboarding?step=accounts">
+              Accounts
+            </a>
+          </>
+        ) : (
+          <>
+            <h1 className="question">Setup bank</h1>
+            <p className="page-intro">
+              You need a SimpleFIN account with your banks linked. SimpleFIN charges $1.50 a month or $15 a year before the first bank.
+            </p>
+            <ol className="bridge">
+              <li>
+                Open{" "}
+                <a href="https://beta-bridge.simplefin.org/" target="_blank" rel="noreferrer">
+                  SimpleFIN Bridge
+                </a>
+                . Choose Get Started and enter your email.
+              </li>
+              <li>Open the link in that email. Accept the terms. You land on My Account.</li>
+              <li>Under Financial Institutions, choose New Connection and link your banks.</li>
+              <li>Under Apps, choose New Connection. Name it so you can recognize this app. Choose Create Setup Token.</li>
+              <li>Copy the token. It works once. If this app refuses it, disable that connection and create another token.</li>
+            </ol>
+            <p className="page-intro">
+              SimpleFIN refreshes each bank about once a day. A copy here asks for at most 90 days of transactions. For a fake bank, the{" "}
+              <a href="https://beta-bridge.simplefin.org/info/developers" target="_blank" rel="noreferrer">
+                developer page
+              </a>{" "}
+              prints a demo token.
+            </p>
+            <form action={connectFromOnboarding} className="stack">
+              <SetupTokenField />
+              <PendingNote>Copying accounts.</PendingNote>
+              <SubmitButton pending="Adding token…">Add token</SubmitButton>
+            </form>
+          </>
+        )
       ) : null}
 
       {step === "accounts" ? (
