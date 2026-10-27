@@ -1,0 +1,12 @@
+services:
+  spendable:
+    image: spendable:preview
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - spendable-preview:/app/data
+    restart: unless-stopped
+
+volumes:
+  spendable-preview:

@@ -137,6 +137,55 @@ describe("claiming and fetching", () => {
     );
   });
 
+  it("trims the access URL and does not follow a redirect", async () => {
+    const access = await claimAccessUrl(token, async (_url, init) => {
+      assert.equal(init?.redirect, "manual");
+      return new Response("https://ada:secret@bridge.example/simplefin\n");
+    });
+    assert.equal(access, "https://ada:secret@bridge.example/simplefin");
+
+    await assert.rejects(
+      () =>
+        claimAccessUrl(token, async () => new Response("", { status: 302, headers: { location: "http://169.254.169.254/" } })),
+      (error: unknown) => error instanceof SpendableError && error.code === "claim_redirect",
+    );
+  });
+
+  it("rejects a Forbidden body, a blank body, and an HTML body without treating them as access URLs", async () => {
+    await assert.rejects(
+      () => claimAccessUrl(token, async () => new Response("Forbidden (was it already claimed?)")),
+      (error: unknown) => error instanceof SpendableError && error.code === "claim_rejected",
+    );
+    await assert.rejects(
+      () => claimAccessUrl(token, async () => new Response("   \n")),
+      (error: unknown) => error instanceof SpendableError && error.code === "bad_access_url",
+    );
+    await assert.rejects(
+      () => claimAccessUrl(token, async () => new Response("<html>Service unavailable</html>")),
+      (error: unknown) => error instanceof SpendableError && error.code === "bad_access_url",
+    );
+  });
+
+  it("does not contact SimpleFIN when the token is not a claim URL", async () => {
+    let called = false;
+    await assert.rejects(
+      () =>
+        claimAccessUrl(Buffer.from("not a claim url").toString("base64"), async () => {
+          called = true;
+          return new Response("https://ada:secret@bridge.example/simplefin");
+        }),
+      (error: unknown) => error instanceof SpendableError && error.code === "bad_token",
+    );
+    assert.equal(called, false);
+  });
+
+  it("reports a server error from the claim and does not return the body", async () => {
+    await assert.rejects(
+      () => claimAccessUrl(token, async () => new Response("<html>Bad Gateway</html>", { status: 502 })),
+      (error: unknown) => error instanceof SpendableError && error.code === "claim_failed" && error.status === 502,
+    );
+  });
+
   it("asks for pending transactions inside a version 2 window", async () => {
     let seen = "";
     await fetchAccountSet("https://ada:secret@bridge.example/simplefin", 1700000000, async (url) => {

@@ -149,6 +149,29 @@ describe("what stays visible and out of the total", () => {
     assert.match(snapshot.receipt.lines.find((line) => line.label === "Euro")?.detail ?? "", /Different currency/);
   });
 
+  it("leaves an account out of the answer when it is not followed", () => {
+    const snapshot = answer({
+      accounts: [
+        account({ id: "checking", role: "spend", balanceCents: 10_000, availableCents: 10_000 }),
+        account({ id: "hidden", role: "spend", balanceCents: 90_000, availableCents: 90_000, tracked: false }),
+      ],
+    });
+    assert.equal(snapshot.spendableCents, 10_000);
+    assert.equal(snapshot.deposits.some((item) => item.id === "hidden"), false);
+  });
+
+  it("does not hold a monthly bill again after the charge already posted this pay period", () => {
+    const held = answer({
+      bills: [bill({ name: "Electric", amountCents: 2_000, dueDay: 28, matchText: "city electric" })],
+    });
+    assert.equal(held.spendableCents, 8_000);
+    const posted = answer({
+      bills: [bill({ name: "Electric", amountCents: 2_000, dueDay: 28, matchText: "city electric" })],
+      transactions: [txn({ id: "elec", amountCents: -2_000, description: "CITY ELECTRIC ACH", posted: isoToLocalNoonUnix("2026-10-26") })],
+    });
+    assert.equal(posted.spendableCents, 10_000);
+  });
+
   it("does not treat a credit balance as cash", () => {
     const snapshot = answer({
       accounts: [

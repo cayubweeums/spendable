@@ -1,58 +1,69 @@
 # spendable
 
-A personal answer to “how much money can I spend right now?”
+Spendable copies balances from SimpleFIN and shows how much you can spend right now. The copied balances stay as the bank reported them.
 
-Balances are copied from your bank through [SimpleFIN](https://www.simplefin.org/protocol.html). The number on the home page is that cash, minus bills due before payday, minus a card payment you opted into, minus a buffer you set. Categories are labels on transactions. None of those views replace the copied balance.
+## Quick start
 
-The safe-to-spend layout takes its cue from [giorobert88/financial-dashboard](https://github.com/giorobert88/financial-dashboard): cash in accounts you spend from, obligations before the next payday, and a comparison against last cycle’s outflows.
+Save this as `docker-compose.yml`:
 
-## Run
+```yaml
+services:
+  spendable:
+    image: ghcr.io/cayubweeums/spendable:latest
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - spendable-data:/app/data
+    restart: unless-stopped
 
-```bash
-npm install
-npm test
-npm run dev
+volumes:
+  spendable-data:
 ```
 
-`npm test` prints every test, how long it took, and a failure with its stack when one breaks. Open http://127.0.0.1:3000. The first launch loads sample numbers so the receipt is visible before a bank is connected.
-
-The dev server listens on localhost only. The SimpleFIN access URL is a secret and lives in `data/spendable.db`, which git ignores.
-
-## Docker
-
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
-The image listens on port 3000 inside the container. Compose publishes that port on `127.0.0.1` only. The database is the `spendable-data` volume, mounted at `/app/data`.
+Open http://127.0.0.1:3000.
 
-## GitHub
+## Planned features
 
-A pull request into `main` has to pass two checks before it can merge:
+Checked items are in the app. The rest are not built yet.
 
-- `verify` runs the test suite and the typecheck
-- `image-builds` builds the container and does not push it
-
-A merge to `main` runs `verify` again. When that passes, `publish-image` builds the same container and pushes it to GitHub Container Registry:
-
-- `ghcr.io/<owner>/spendable:latest`
-- `ghcr.io/<owner>/spendable:<commit sha>`
-
-## Connect a bank
-
-1. Create a setup token at https://bridge.simplefin.org/simplefin/create
-2. Paste it on the Bank page.
-
-A token can be claimed once. For a fake bank, the [SimpleFIN developer page](https://beta-bridge.simplefin.org/info/developers) prints a demo token. Sync copies balances and transactions. SimpleFIN asks apps to stay around 24 account requests a day, and 90 days of history at a time. This app syncs only when you ask it to.
-
-If a claim or a later request is refused with 403, create a new token. If you did not use the old one, disable it at the bridge.
-
-## The answer
-
-Spend-from accounts contribute their available balance when the bank sends one. Otherwise the ledger balance is used, with pending debits taken off. Pending debits are not taken off a second time when an available balance is already present.
-
-Savings stay visible and out of the total until you mark them “spend from this.” A credit card balance is money owed. It is subtracted only when you set a due day and choose to hold the full balance or a minimum, and that day falls before payday.
-
-## Later: an agent API
-
-`GET /api/v1` lists the HTTP contract. `GET /api/v1/snapshot` is the answer, in integer cents, with every subtraction. A future MCP server should call these routes, or import `src/core/service.ts`, and should not invent a second way to compute balances. Account balances change when a sync copies them from SimpleFIN.
+- [x] Copy balances from SimpleFIN
+- [x] Show how much can be spent right now without rewriting bank balances
+- [x] Choose which accounts to follow and set account type
+- [x] Category rules for later transactions
+- [x] Monthly bills that stay on until turned off
+- [x] Show those bills on a calendar through the next payday
+- [x] Compare this pay cycle with the last one
+- [x] Docker install
+- [ ] Require a password before the app opens
+- [ ] Rename an account and keep a note on it
+- [ ] Encrypt the data with the login password, and decrypt it after login. The server does not keep that key.
+- [ ] Turn bank sync on or off, and choose how often it runs and when
+- [ ] Reset sync: drop the copied transactions and balances, pull them again from the bank, and run the rules again. Rules and settings stay.
+- [ ] Categories, with groups, rename, merge, delete, hide, and notes
+- [ ] Projected income, savings, and expenses on a repeating date. They count in the spendable number until a bank transaction matches the rule for that projection. Then they count as actual, and the bank figure stays the bank figure.
+- [ ] Show how far under or over the month landed against the spendable number. That display does not change the number. It is there so most of the amount can stay unspent.
+- [ ] Rules that match imported payee, payee, account, category, date, notes, amount, or tag, then set category, payee, notes, or tag. Rules run in order, before and after import.
+- [ ] Saving a category or payee can create a rule for the next import. That can be turned off.
+- [ ] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
+- [ ] Split one transaction across categories
+- [ ] Payees: rename, merge, favorite, and a default category
+- [ ] Tags on transactions. A tag is only a label. A rule can set one.
+- [ ] Notes on transactions, categories, and accounts
+- [ ] Filters that stack, and that you can save
+- [ ] Edit or duplicate several transactions at once
+- [ ] Merge two duplicate transactions and keep the fields that were filled in
+- [ ] Undo an edit
+- [ ] Reports for a calendar of income and expenses, spending over a period, a summary total, net worth, and cash flow
+- [ ] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign
+- [ ] Skip a transaction that is already imported, and use the bank date when a hand-entered one matches
+- [ ] Import a YNAB4 or nYNAB file
+- [ ] Export transactions as CSV
+- [ ] Download a zip of the server data, and import that zip later
+- [ ] The first user is the admin. Later accounts come from that admin, or from sign-up when the container allows it. A new account starts with a temporary password and must set a new one before it continues. Each user sees only their own data, encrypted with the password they set.
+- [ ] Hide amounts on screen
+- [ ] Date format, number format, first day of the week, and hiding cents
+- [ ] A layout that fits a phone

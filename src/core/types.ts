@@ -2,6 +2,7 @@ import type { PaydayFrequency } from "./dates";
 
 export type Role = "spend" | "reserve" | "credit" | "ignore";
 export type PayMode = "full" | "minimum" | "none";
+export type AccountKind = "checking" | "savings" | "credit" | "roth" | "roth_ira" | "stocks" | "other";
 
 export type Account = {
   id: string;
@@ -15,6 +16,8 @@ export type Account = {
   dueDay: number | null;
   payMode: PayMode;
   minimumCents: number;
+  kind?: AccountKind;
+  tracked?: boolean;
 };
 
 export type Bill = {
@@ -23,6 +26,7 @@ export type Bill = {
   amountCents: number;
   dueDay: number;
   active: boolean;
+  matchText?: string | null;
 };
 
 export type Transaction = {
@@ -46,6 +50,7 @@ export type ReceiptLine = {
   detail: string;
   cents: number;
   kind: "bank" | "sub";
+  when?: string;
 };
 
 export type Snapshot = {
@@ -68,6 +73,7 @@ export type Snapshot = {
     name: string;
     orgName: string;
     role: "spend" | "reserve";
+    kind: AccountKind;
     currency: string;
     ledgerCents: number;
     availableCents: number | null;
