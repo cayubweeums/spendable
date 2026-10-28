@@ -302,6 +302,11 @@ function boot(database: DatabaseSync): void {
         token TEXT PRIMARY KEY,
         expires_at INTEGER NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS access_tokens (
+        name TEXT PRIMARY KEY,
+        hash TEXT NOT NULL,
+        last_used INTEGER
+      );
       CREATE TABLE IF NOT EXISTS connection (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         access_url TEXT NOT NULL,
@@ -441,6 +446,11 @@ function ensureColumns(database: DatabaseSync): void {
       token TEXT PRIMARY KEY,
       expires_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS access_tokens (
+      name TEXT PRIMARY KEY,
+      hash TEXT NOT NULL,
+      last_used INTEGER
+    );
     CREATE UNIQUE INDEX IF NOT EXISTS bills_match_text ON bills(match_text) WHERE match_text IS NOT NULL;
   `);
   if (!tableColumns(database, "rules").has("tag")) {
@@ -519,6 +529,28 @@ export function sessionOpen(token: string, now = Date.now()): boolean {
 
 export function deleteSession(token: string): void {
   db().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+}
+
+export function insertAccessToken(name: string, hash: string): void {
+  db().prepare("INSERT INTO access_tokens (name, hash, last_used) VALUES (?, ?, NULL)").run(name, hash);
+}
+
+export function listAccessTokens(): { name: string; lastUsed: number | null }[] {
+  const rows = db().prepare("SELECT name, last_used FROM access_tokens ORDER BY name").all() as { name: string; last_used: number | null }[];
+  return rows.map((row) => ({ name: row.name, lastUsed: row.last_used }));
+}
+
+export function accessTokenRows(): { name: string; hash: string }[] {
+  return db().prepare("SELECT name, hash FROM access_tokens").all() as { name: string; hash: string }[];
+}
+
+export function touchAccessToken(name: string, at: number): void {
+  db().prepare("UPDATE access_tokens SET last_used = ? WHERE name = ?").run(at, name);
+}
+
+export function deleteAccessToken(name: string): void {
+  const result = db().prepare("DELETE FROM access_tokens WHERE name = ?").run(name);
+  if (!Number(result.changes ?? 0)) throw new SpendableError("No token with that name.", "not_found", 404);
 }
 
 function mapAccount(row: AccountRow): Account {

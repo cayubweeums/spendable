@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { accountTitle, inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
 import { diffDays, isISODate, isoToLocalNoonUnix, localISODate, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
 import * as store from "./db";
@@ -146,6 +146,48 @@ export function sessionIsOpen(token: string | null | undefined, now = Date.now()
   if (!token) return false;
   if (store.isSealed() && !store.isUnlocked()) return false;
   return store.sessionOpen(token, now);
+}
+
+// shortcut: a name is unique. An expiry waits. A locked file stays locked.
+function accessHash(token: string): string {
+  return createHash("sha256").update(token).digest("base64url");
+}
+
+export function listAccessTokens(): { name: string; lastUsed: number | null }[] {
+  if (!store.isUnlocked()) return [];
+  return store.listAccessTokens();
+}
+
+export function issueAccessToken(name: string): { name: string; token: string } {
+  if (!store.isUnlocked()) throw new SpendableError("Sign in first.", "locked", 401);
+  const cleaned = sanitizeLabel(name, 40);
+  if (!cleaned) throw new SpendableError("A token needs a name.", "bad_token");
+  if (store.listAccessTokens().some((row) => row.name.toLowerCase() === cleaned.toLowerCase())) {
+    throw new SpendableError("That name is taken.", "bad_token");
+  }
+  const token = randomBytes(32).toString("base64url");
+  store.insertAccessToken(cleaned, accessHash(token));
+  return { name: cleaned, token };
+}
+
+export function revokeAccessToken(name: string): void {
+  if (!store.isUnlocked()) throw new SpendableError("Sign in first.", "locked", 401);
+  store.deleteAccessToken(sanitizeLabel(name, 40));
+}
+
+export function accessTokenMatches(header: string | null): boolean {
+  if (!header || !store.isUnlocked()) return false;
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  if (!match) return false;
+  const got = Buffer.from(accessHash(match[1]));
+  for (const row of store.accessTokenRows()) {
+    const have = Buffer.from(row.hash);
+    if (got.length === have.length && timingSafeEqual(got, have)) {
+      store.touchAccessToken(row.name, Math.floor(Date.now() / 1000));
+      return true;
+    }
+  }
+  return false;
 }
 
 export function closeSession(token: string | null | undefined): void {

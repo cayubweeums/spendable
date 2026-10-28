@@ -1,10 +1,12 @@
 import { addUser, connectBank, disconnectBank, importBackup, importFile, loadSample, resetBank } from "../../actions";
+import { AccessToken } from "@/components/access-token";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncScheduleForm } from "@/components/sync-schedule";
 import { accountTitle } from "@/core/bank";
-import { connectionStatus, isAdmin, listAccounts } from "@/core/service";
+import { formatTimestamp } from "@/core/dates";
+import { connectionStatus, getDisplay, isAdmin, listAccessTokens, listAccounts } from "@/core/service";
 
 export default async function BankPage({
   searchParams,
@@ -14,6 +16,11 @@ export default async function BankPage({
   const query = await searchParams;
   const status = connectionStatus();
   const accounts = listAccounts();
+  const display = getDisplay();
+  const tokens = listAccessTokens().map((token) => ({
+    name: token.name,
+    lastUsed: token.lastUsed == null ? "Never" : formatTimestamp(token.lastUsed, display.date),
+  }));
   return (
     <>
       <ReadFlash notice={query.notice} />
@@ -137,6 +144,7 @@ export default async function BankPage({
           </button>
         </form>
       </div>
+      <AccessToken tokens={tokens} />
       {isAdmin() ? (
         <form action={addUser} className="section stack">
           <h2>Users</h2>
