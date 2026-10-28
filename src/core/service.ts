@@ -21,7 +21,7 @@ import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
 import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
-import type { AccountKind, Category, Payee, PayMode, Role, Settings, Snapshot, Transaction } from "./types";
+import type { AccountKind, Category, Payee, PayMode, PlanKind, Role, Settings, Snapshot, Transaction } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export { syncIsDue, type SyncSchedule };
@@ -131,6 +131,7 @@ export function getSnapshot(): Snapshot {
     syncErrors: connection?.errors ?? [],
     accounts: store.listAccounts(),
     bills: store.listBills(),
+    projections: store.listProjections(),
     transactions: store.listTransactions(),
   });
 }
@@ -143,6 +144,17 @@ export function listAccounts() {
 export function listBills() {
   ready();
   return store.listBills();
+}
+
+export const PLAN_KINDS = [
+  ["income", "Income"],
+  ["saving", "Saving"],
+  ["expense", "Expense"],
+] as const;
+
+export function listProjections() {
+  ready();
+  return store.listProjections();
 }
 
 export const FILTER_FIELDS = [
@@ -634,6 +646,36 @@ export function createBill(input: { name: string; amountCents: number; dueDay: n
 export function removeBill(id: string): void {
   ready();
   if (store.deleteBill(id) === 0) throw new SpendableError("No bill with that id.", "not_found", 404);
+}
+
+export function createProjection(input: {
+  name: string;
+  amountCents: number;
+  dueDay: number;
+  kind: string;
+  matchText?: string;
+}): { id: string } {
+  ready();
+  const name = sanitizeLabel(input.name, 80);
+  if (!name) throw new SpendableError("A plan needs a name.", "bad_plan");
+  if (!PLAN_KINDS.some(([id]) => id === input.kind)) throw new SpendableError("Not a choice.", "bad_plan");
+  const dueDay = assertDueDay(input.dueDay);
+  if (dueDay == null) throw new SpendableError("Due day has to be a day of the month, from 1 to 31.", "bad_due_day");
+  const plan = {
+    id: randomUUID(),
+    name,
+    amountCents: assertCents(input.amountCents, "Amount"),
+    dueDay,
+    kind: input.kind as PlanKind,
+    matchText: sanitizeLabel(input.matchText ?? "", 80),
+  };
+  store.insertProjection(plan);
+  return { id: plan.id };
+}
+
+export function removeProjection(id: string): void {
+  ready();
+  if (store.deleteProjection(id) === 0) throw new SpendableError("No plan with that id.", "not_found", 404);
 }
 
 export function listCategories(): Category[] {

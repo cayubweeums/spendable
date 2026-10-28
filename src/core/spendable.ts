@@ -9,7 +9,7 @@ import {
   postedToISO,
   previousPayday,
 } from "./dates";
-import type { Account, Bill, Settings, Snapshot, Transaction } from "./types";
+import type { Account, Bill, Projection, Settings, Snapshot, Transaction } from "./types";
 
 export const PRINCIPLE =
   "Account balances are the figures last copied from the bank. Bills, card payments, the buffer, and categories are a view on top of those figures. They never replace them.";
@@ -23,6 +23,7 @@ type Input = Settings & {
   syncErrors: string[];
   accounts: Account[];
   bills: Bill[];
+  projections?: Projection[];
   transactions: Transaction[];
 };
 
@@ -53,6 +54,19 @@ function cumulativeOutflows(
   return daily.map((value) => {
     running += value;
     return running;
+  });
+}
+
+function projectionRecorded(plan: Projection, transactions: Transaction[], previous: string, today: string): boolean {
+  const needle = plan.matchText.trim().toLowerCase();
+  if (!needle) return false;
+  const income = plan.kind === "income";
+  return transactions.some((txn) => {
+    if (income ? txn.amountCents <= 0 : txn.amountCents >= 0) return false;
+    if (!txn.description.toLowerCase().includes(needle)) return false;
+    if (txn.pending) return true;
+    const iso = postedToISO(txn.posted);
+    return iso != null && iso >= previous && iso <= today;
   });
 }
 
@@ -126,6 +140,25 @@ export function computeSpendable(input: Input): Snapshot {
           label: bill.name,
           detail: `Due ${formatLong(date)}`,
           cents: -bill.amountCents,
+          when: date,
+        },
+      });
+    }
+  }
+
+  for (const plan of input.projections ?? []) {
+    if (projectionRecorded(plan, transactions, previous, input.today)) continue;
+    const dates = dueDatesInWindow(plan.dueDay, input.today, next);
+    const signed = plan.kind === "income" ? plan.amountCents : -plan.amountCents;
+    for (const date of dates) {
+      liquid += signed;
+      subs.push({
+        when: date,
+        line: {
+          kind: plan.kind === "income" ? "add" : "sub",
+          label: plan.name,
+          detail: `Due ${formatLong(date)}`,
+          cents: signed,
           when: date,
         },
       });
