@@ -93,3 +93,61 @@ export function unzipDatabase(bytes: Buffer): Buffer {
   if (plain.length !== match.uncompressed || (crc32(plain) >>> 0) !== match.checksum) fail("That zip is damaged.");
   return plain;
 }
+
+export function unzipEntries(bytes: Buffer): { name: string; data: Buffer }[] {
+  if (bytes.length < 22 || bytes.length > MAX_BACKUP_BYTES) {
+    throw new SpendableError("That file is not a zip.", "bad_import");
+  }
+  const start = Math.max(0, bytes.length - (22 + 65535));
+  let end = -1;
+  for (let offset = bytes.length - 22; offset >= start; offset -= 1) {
+    if (bytes.readUInt32LE(offset) === 0x06054b50) {
+      end = offset;
+      break;
+    }
+  }
+  if (end < 0) throw new SpendableError("That file is not a zip.", "bad_import");
+  const count = bytes.readUInt16LE(end + 10);
+  let offset = bytes.readUInt32LE(end + 16);
+  const files: { name: string; data: Buffer }[] = [];
+  for (let index = 0; index < count; index += 1) {
+    if (offset + 46 > bytes.length || bytes.readUInt32LE(offset) !== 0x02014b50) {
+      throw new SpendableError("That zip is damaged.", "bad_import");
+    }
+    const flags = bytes.readUInt16LE(offset + 8);
+    const method = bytes.readUInt16LE(offset + 10);
+    const checksum = bytes.readUInt32LE(offset + 16);
+    const compressed = bytes.readUInt32LE(offset + 20);
+    const uncompressed = bytes.readUInt32LE(offset + 24);
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const extraLength = bytes.readUInt16LE(offset + 30);
+    const commentLength = bytes.readUInt16LE(offset + 32);
+    const local = bytes.readUInt32LE(offset + 42);
+    const name = bytes.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    offset += 46 + nameLength + extraLength + commentLength;
+    if (name.endsWith("/") || name.startsWith("__MACOSX/") || name.endsWith(".DS_Store")) continue;
+    if ((flags & 0x1) !== 0 || (method !== 0 && method !== 8)) {
+      throw new SpendableError("That zip is damaged.", "bad_import");
+    }
+    if (uncompressed > MAX_BACKUP_BYTES || compressed > MAX_BACKUP_BYTES) {
+      throw new SpendableError("That file is too big.", "bad_import");
+    }
+    if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== 0x04034b50) {
+      throw new SpendableError("That zip is damaged.", "bad_import");
+    }
+    const dataStart = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
+    const payload = bytes.subarray(dataStart, dataStart + compressed);
+    if (payload.length !== compressed) throw new SpendableError("That zip is damaged.", "bad_import");
+    let plain: Buffer;
+    try {
+      plain = method === 0 ? Buffer.from(payload) : inflateRawSync(payload, { maxOutputLength: MAX_BACKUP_BYTES });
+    } catch {
+      throw new SpendableError("That zip is damaged.", "bad_import");
+    }
+    if (plain.length !== uncompressed || (crc32(plain) >>> 0) !== checksum) {
+      throw new SpendableError("That zip is damaged.", "bad_import");
+    }
+    files.push({ name, data: plain });
+  }
+  return files;
+}

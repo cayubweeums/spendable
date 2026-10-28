@@ -4,6 +4,7 @@ import { diffDays, isISODate, isoToLocalNoonUnix, localISODate, postedToISO, typ
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { parseImport } from "./import";
+import { parseYnab, type YnabCharge } from "./ynab";
 import { decimalToCents } from "./money";
 import { hashPassword, passwordMatches } from "./password";
 import { unzipDatabase, zipDatabase } from "./zip";
@@ -294,35 +295,76 @@ export function importCharges(input: {
     amountColumn: input.amountColumn,
     payeeColumn: input.payeeColumn,
   });
-  const seen = new Set(
-    store
-      .listTransactions()
-      .filter((txn) => txn.accountId === input.accountId)
-      .map((txn) => chargeKey(txn.amountCents, txn.description, postedToISO(txn.posted))),
-  );
   let imported = 0;
   store.withTransaction(() => {
-    for (const row of rows) {
-      const key = chargeKey(row.amountCents, row.description, row.posted);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      store.insertTransaction({
-        id: `import_${randomUUID()}`,
-        accountId: input.accountId,
-        posted: isoToLocalNoonUnix(row.posted),
-        amountCents: row.amountCents,
-        description: row.description,
-        pending: false,
-        category: null,
-      });
-      imported += 1;
-    }
+    imported = addImported(input.accountId, rows);
     if (imported > 0) {
       store.applyImportedRules();
       store.applyCategoryRules();
     }
   });
   return { imported };
+}
+
+export function importYnab(bytes: Buffer, name: string): { imported: number } {
+  ready();
+  const rows = parseYnab(bytes, name);
+  const accounts = new Map(store.listAccounts().map((account) => [accountTitle(account).trim().toLowerCase(), account.id]));
+  const grouped = new Map<string, YnabCharge[]>();
+  for (const row of rows) {
+    const accountId = accounts.get(row.account.trim().toLowerCase());
+    if (!accountId) continue;
+    const list = grouped.get(accountId) ?? [];
+    list.push(row);
+    grouped.set(accountId, list);
+  }
+  if (grouped.size === 0) throw new SpendableError("No account with that name.", "not_found", 404);
+  let imported = 0;
+  store.withTransaction(() => {
+    for (const [accountId, list] of grouped) imported += addImported(accountId, list);
+    if (imported > 0) {
+      store.applyImportedRules();
+      store.applyCategoryRules();
+    }
+  });
+  return { imported };
+}
+
+function addImported(accountId: string, rows: { posted: string; amountCents: number; description: string; category?: string | null; note?: string; cleared?: boolean; splits?: { category: string; amountCents: number }[] }[]): number {
+  const seen = new Set(
+    store
+      .listTransactions()
+      .filter((txn) => txn.accountId === accountId)
+      .map((txn) => chargeKey(txn.amountCents, txn.description, postedToISO(txn.posted))),
+  );
+  let imported = 0;
+  for (const row of rows) {
+    const key = chargeKey(row.amountCents, row.description, row.posted);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const id = `import_${randomUUID()}`;
+    const splits = (row.splits ?? []).filter((part) => part.category && part.amountCents !== 0);
+    const split = splits.length >= 2 && splits.reduce((total, part) => total + part.amountCents, 0) === row.amountCents;
+    store.insertTransaction({
+      id,
+      accountId,
+      posted: isoToLocalNoonUnix(row.posted),
+      amountCents: row.amountCents,
+      description: row.description,
+      pending: false,
+      category: split ? null : row.category || null,
+    });
+    if (!split && row.category) store.setTransactionCategory(id, row.category);
+    if (split) {
+      for (const part of splits) store.insertCategory(part.category);
+      store.replaceSplits(id, splits);
+      store.setTransactionCategory(id, null);
+    }
+    if (row.note) store.setTransactionNote(id, row.note);
+    if (row.cleared) store.setTransactionCleared(id, true);
+    imported += 1;
+  }
+  return imported;
 }
 
 function chargeKey(amountCents: number, description: string, iso: string | null): string {
