@@ -665,6 +665,10 @@ export function insertTransaction(txn: Transaction): void {
     .run(txn.id, txn.accountId, txn.posted, txn.amountCents, txn.description, txn.pending ? 1 : 0, txn.category);
 }
 
+export function setTransactionPosted(id: string, posted: number): void {
+  db().prepare("UPDATE transactions SET posted = ? WHERE id = ?").run(posted, id);
+}
+
 export function upsertSyncedTransaction(txn: Omit<Transaction, "category" | "note">): void {
   db()
     .prepare(
