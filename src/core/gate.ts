@@ -22,6 +22,7 @@ export function gateDecision(input: {
 }): "next" | "login" | "onboarding" | "password" | "unauthorized" {
   if (input.pathname === "/icon") return "next";
   if (input.pathname === "/api/v1/session" && input.method === "POST") return "next";
+  if (input.pathname === "/api/mcp" && input.method === "POST" && !(input.signedIn && input.mustChange)) return "next";
   if (input.pathname === "/api/v1/flash" && input.method === "DELETE") return "next";
   if (!input.signedIn && input.pathname === "/api/v1/users" && input.method === "POST") return "next";
   if (input.signedIn && input.mustChange) {
