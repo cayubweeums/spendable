@@ -25,6 +25,11 @@ import {
   type ChargeFilter,
 } from "@/core/service";
 
+function monthLine(today: string, gapCents: number, money: (cents: number) => string): string {
+  const name = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(new Date(`${today}T00:00:00Z`));
+  return gapCents >= 0 ? `${name} is under ${money(gapCents)}` : `${name} is over ${money(-gapCents)}`;
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -119,6 +124,7 @@ export default async function HomePage({
               ? `Short ${money(-snapshot.spendableCents)} before ${formatLong(snapshot.nextPayday)}.`
               : `${money(snapshot.perDayCents)} a day until ${formatLong(snapshot.nextPayday)}.`}
           </p>
+          <p className="allowance">{monthLine(snapshot.today, snapshot.monthGapCents, money)}</p>
           <p className="principle">Balances are copied from the bank. Nothing here changes them.</p>
         </section>
 

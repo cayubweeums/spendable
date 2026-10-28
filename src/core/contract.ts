@@ -7,7 +7,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1", purpose: "List this contract." },
     { method: "POST", path: "/api/v1/session", purpose: "Set the password on first use, or sign in. Body: password, and confirm when no password is set yet." },
     { method: "DELETE", path: "/api/v1/session", purpose: "Sign out the session that sent this request." },
-    { method: "GET", path: "/api/v1/snapshot", purpose: "The answer: bank figures, every subtraction, and what is left to spend." },
+    { method: "GET", path: "/api/v1/snapshot", purpose: "The answer: bank figures, every subtraction, and what is left to spend. The month gap does not change that number." },
     { method: "GET", path: "/api/v1/accounts", purpose: "Accounts and the roles you assigned." },
     { method: "PATCH", path: "/api/v1/accounts/:id", purpose: "Set the name, note, role, card due day, and payment rule. Does not change the balance." },
     { method: "GET", path: "/api/v1/bills", purpose: "Bills held back before payday." },
