@@ -12,7 +12,9 @@ import {
   createBill,
   createCategory,
   disconnect,
+  decodeFilter,
   dollarsToCents,
+  encodeFilter,
   establishPassword,
   listAccounts,
   listCategories,
@@ -20,12 +22,15 @@ import {
   mergeCategory,
   mergePayee,
   needsOnboarding,
+  normalizeFilter,
   passwordIsSet,
   removeBill,
   removeCategory,
+  removeNamedFilter,
   removeMatchRule,
   restoreBackup,
   restoreDemo,
+  saveNamedFilter,
   saveRules as writeRules,
   setLearnRules,
   saveSyncSchedule,
@@ -39,6 +44,7 @@ import {
   updateSettings,
 } from "@/core/service";
 import { ruleSource } from "@/core/rules";
+import type { ChargeFilter } from "@/core/service";
 
 async function bail(path: string, error: unknown): Promise<never> {
   const jar = await cookies();
@@ -80,6 +86,21 @@ function applyAccountForm(formData: FormData) {
 
 function refresh() {
   revalidatePath("/", "layout");
+}
+
+function stackFromForm(formData: FormData): ChargeFilter[] {
+  return formData.getAll("c").flatMap((item) => {
+    const filter = decodeFilter(String(item));
+    return filter ? [filter] : [];
+  });
+}
+
+function filterHref(name: string, stack: ChargeFilter[]): string {
+  const params = new URLSearchParams();
+  if (name.trim()) params.set("name", name.trim());
+  for (const filter of stack) params.append("c", encodeFilter(filter));
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
 }
 
 export async function openApp(formData: FormData) {
@@ -305,6 +326,60 @@ export async function saveTransaction(formData: FormData) {
   }
   refresh();
   redirect("/?notice=saved");
+}
+
+export async function addFilter(formData: FormData) {
+  await requirePage();
+  const current = stackFromForm(formData);
+  const name = String(formData.get("name") ?? "");
+  let stack = current;
+  try {
+    if (current.length >= 8) throw new SpendableError("Eight conditions.", "bad_filter");
+    stack = [
+      ...current,
+      normalizeFilter({
+        field: String(formData.get("field") ?? ""),
+        op: String(formData.get("op") ?? ""),
+        value: String(formData.get("value") ?? ""),
+      }),
+    ];
+  } catch (error) {
+    await bail(filterHref(name, current), error);
+  }
+  redirect(filterHref(name, stack));
+}
+
+export async function dropFilter(formData: FormData) {
+  await requirePage();
+  const current = stackFromForm(formData);
+  const name = String(formData.get("name") ?? "");
+  const index = Number(formData.get("index"));
+  redirect(filterHref(name, current.filter((_, item) => item !== index)));
+}
+
+export async function keepFilter(formData: FormData) {
+  await requirePage();
+  const stack = stackFromForm(formData);
+  const name = String(formData.get("name") ?? "");
+  let saved = "";
+  try {
+    saved = saveNamedFilter(name, stack);
+  } catch (error) {
+    await bail(filterHref(name, stack), error);
+  }
+  refresh();
+  redirect(filterHref(saved, []));
+}
+
+export async function forgetFilter(formData: FormData) {
+  await requirePage();
+  try {
+    removeNamedFilter(String(formData.get("name") ?? ""));
+  } catch (error) {
+    await bail("/", error);
+  }
+  refresh();
+  redirect("/");
 }
 
 export async function undoTransaction() {

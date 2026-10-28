@@ -1,20 +1,44 @@
-import { saveSettings, saveTransaction, undoTransaction } from "../actions";
+import { addFilter, dropFilter, forgetFilter, keepFilter, saveSettings, saveTransaction, undoTransaction } from "../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { PaceChart, paceCaption } from "@/components/pace-chart";
 import { SubmitButton } from "@/components/submit-button";
-import { formatLong, formatTimestamp, ordinal } from "@/core/dates";
+import { postedToISO, formatLong, formatTimestamp, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { kindLabel } from "@/core/bank";
-import { matchingRule } from "@/core/rules";
-import { canUndo, getSettings, getSnapshot, listBills, listCategories, listPayees, listRules } from "@/core/service";
+import { accountTitle, kindLabel } from "@/core/bank";
+import { matchingRule, RULE_OPS } from "@/core/rules";
+import {
+  canUndo,
+  decodeFilter,
+  encodeFilter,
+  FILTER_FIELDS,
+  getSettings,
+  getSnapshot,
+  listAccounts,
+  listBills,
+  listCategories,
+  listPayees,
+  listRules,
+  listSavedFilters,
+  listTransactions,
+  readSavedFilter,
+  type ChargeFilter,
+} from "@/core/service";
 
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ notice?: string }>;
+  searchParams: Promise<{ notice?: string; name?: string; c?: string | string[] }>;
 }) {
   const query = await searchParams;
+  const named = typeof query.name === "string" ? query.name : "";
+  const edited = query.c != null;
+  const fromQuery = (edited ? (Array.isArray(query.c) ? query.c : [query.c]) : []).flatMap((item) => {
+    const filter = item ? decodeFilter(item) : null;
+    return filter ? [filter] : [];
+  });
+  const conditions: ChargeFilter[] = edited ? fromQuery : named ? readSavedFilter(named) : [];
+  const saved = listSavedFilters();
   const snapshot = getSnapshot();
   const settings = getSettings();
   const rules = listRules();
@@ -23,6 +47,28 @@ export default async function HomePage({
     .filter((category) => !category.hidden)
     .map((category) => category.name);
   const payeeName = new Map(listPayees().flatMap((payee) => payee.descriptions.map((description) => [description, payee.name] as const)));
+  const accountById = new Map(listAccounts().map((account) => [account.id, account]));
+  const charges = conditions.length
+    ? listTransactions(undefined, conditions)
+        .sort((a, b) => b.posted - a.posted || a.description.localeCompare(b.description))
+        .map((txn) => {
+          const account = accountById.get(txn.accountId);
+          return {
+            id: txn.id,
+            posted: postedToISO(txn.posted),
+            description: txn.description,
+            amountCents: txn.amountCents,
+            accountName: account ? accountTitle(account) : "Account",
+            pending: txn.pending,
+            category: txn.category,
+            note: txn.note ?? "",
+            tags: txn.tags ?? [],
+            cleared: txn.cleared === true,
+            splits: txn.splits ?? [],
+            currency: account?.currency ?? snapshot.currency,
+          };
+        })
+    : snapshot.recent;
   const money = (cents: number) => formatMoney(cents, snapshot.currency);
   const stamps = [...snapshot.deposits.map((account) => account.balanceDate), ...snapshot.debts.map((account) => account.balanceDate)];
   const asOf = stamps.length > 0 ? Math.max(...stamps) : null;
@@ -122,6 +168,87 @@ export default async function HomePage({
                 </form>
               ) : null}
             </div>
+            {conditions.length > 0 ? (
+              <div className="filter-line">
+                {conditions.map((filter, index) => (
+                  <form action={dropFilter} key={`${encodeFilter(filter)}-${index}`}>
+                    {named ? <input type="hidden" name="name" value={named} /> : null}
+                    {conditions.map((item, itemIndex) => (
+                      <input key={itemIndex} type="hidden" name="c" value={encodeFilter(item)} />
+                    ))}
+                    <input type="hidden" name="index" value={index} />
+                    <span>
+                      {FILTER_FIELDS.find(([id]) => id === filter.field)?.[1]} {filter.op} {filter.value}
+                    </span>
+                    <button className="quiet" type="submit">
+                      Remove
+                    </button>
+                  </form>
+                ))}
+              </div>
+            ) : null}
+            <form action={addFilter} className="row">
+              {named ? <input type="hidden" name="name" value={named} /> : null}
+              {conditions.map((filter, index) => (
+                <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
+              ))}
+              <label>
+                Field
+                <select name="field" defaultValue="category">
+                  {FILTER_FIELDS.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Op
+                <select name="op" defaultValue="is">
+                  {RULE_OPS.map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Value
+                <input name="value" maxLength={180} required />
+              </label>
+              <SubmitButton pending="Adding…">Add</SubmitButton>
+            </form>
+            {conditions.length > 0 ? (
+              <form action={keepFilter} className="row">
+                {conditions.map((filter, index) => (
+                  <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
+                ))}
+                <label>
+                  Name
+                  <input name="name" defaultValue={named} maxLength={40} required />
+                </label>
+                <SubmitButton pending="Saving…">Save</SubmitButton>
+                {named && saved.some((filter) => filter.name === named) ? (
+                  <button className="quiet" form="forget-filter" type="submit">
+                    Delete
+                  </button>
+                ) : null}
+              </form>
+            ) : null}
+            {named && saved.some((filter) => filter.name === named) ? (
+              <form id="forget-filter" action={forgetFilter}>
+                <input type="hidden" name="name" value={named} />
+              </form>
+            ) : null}
+            {saved.length > 0 ? (
+              <p className="filter-saved">
+                {saved.map((filter) => (
+                  <a key={filter.name} href={`/?name=${encodeURIComponent(filter.name)}`} aria-current={filter.name === named ? "page" : undefined}>
+                    {filter.name}
+                  </a>
+                ))}
+              </p>
+            ) : null}
             <datalist id="categories">
               {categoryNames.map((name) => (
                 <option key={name} value={name} />
@@ -136,7 +263,7 @@ export default async function HomePage({
                 </tr>
               </thead>
               <tbody>
-                {snapshot.recent.map((txn) => {
+                {charges.map((txn) => {
                   const rule = matchingRule(txn.description, rules);
                   const bill = bills.find(
                     (item) =>

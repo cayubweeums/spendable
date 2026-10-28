@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
+import { accountTitle, inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
 import { isISODate, localISODate, postedToISO, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
@@ -11,6 +11,7 @@ import {
   isRuleField,
   normalizeContains,
   RULE_FIELD_OPS,
+  ruleMatches,
   ruleSource,
   type CategoryRule,
   type MatchRule,
@@ -20,7 +21,7 @@ import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
 import { computeSpendable } from "./spendable";
 import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
-import type { AccountKind, Category, Payee, PayMode, Role, Settings, Snapshot } from "./types";
+import type { AccountKind, Category, Payee, PayMode, Role, Settings, Snapshot, Transaction } from "./types";
 
 export const SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 export { syncIsDue, type SyncSchedule };
@@ -144,15 +145,116 @@ export function listBills() {
   return store.listBills();
 }
 
-export function listTransactions(since?: string) {
+export const FILTER_FIELDS = [
+  ["payee", "Payee"],
+  ["account", "Account"],
+  ["category", "Category"],
+  ["date", "Date"],
+  ["notes", "Notes"],
+  ["amount", "Amount"],
+  ["tag", "Tag"],
+] as const;
+
+export type ChargeFilter = { field: (typeof FILTER_FIELDS)[number][0]; op: RuleOp; value: string };
+
+export function normalizeFilter(input: { field: string; op: string; value: string }): ChargeFilter {
+  const field = FILTER_FIELDS.find(([id]) => id === input.field)?.[0];
+  if (!field) throw new SpendableError("Not a choice.", "bad_filter");
+  const ops: readonly string[] = RULE_FIELD_OPS[field];
+  if (!ops.includes(input.op)) throw new SpendableError("That comparison does not fit.", "bad_filter");
+  const value = sanitizeLabel(input.value, 180);
+  if (!value) throw new SpendableError("Add a value.", "bad_filter");
+  if (field === "date" && !isISODate(value)) throw new SpendableError("Date should be YYYY-MM-DD.", "bad_date");
+  if (field === "amount") dollarsToCents(value, "Amount");
+  return { field, op: input.op as RuleOp, value };
+}
+
+export function encodeFilter(filter: ChargeFilter): string {
+  return `${filter.field}\t${filter.op}\t${filter.value}`;
+}
+
+export function decodeFilter(raw: string): ChargeFilter | null {
+  const [field, op, ...rest] = raw.split("\t");
+  if (!field || !op) return null;
+  try {
+    return normalizeFilter({ field, op, value: rest.join("\t") });
+  } catch {
+    return null;
+  }
+}
+
+function chargeMatches(filter: ChargeFilter, txn: Transaction, account: string, payee: string): boolean {
+  const fact = {
+    importedPayee: txn.description,
+    payee,
+    account,
+    category: txn.category ?? "",
+    date: postedToISO(txn.posted) ?? "",
+    notes: txn.note ?? "",
+    amountCents: txn.amountCents,
+    tags: txn.tags ?? [],
+    cleared: txn.cleared === true,
+  };
+  if (filter.field === "payee") {
+    return ruleMatches({ ...filter, field: "payee" }, fact) || ruleMatches({ ...filter, field: "imported_payee" }, fact);
+  }
+  if (filter.field === "category") {
+    const names = [txn.category ?? "", ...(txn.splits ?? []).map((part) => part.category)];
+    return names.some((category) => category !== "" && ruleMatches(filter, { ...fact, category }));
+  }
+  return ruleMatches(filter, fact);
+}
+
+export function listTransactions(since?: string, conditions: ChargeFilter[] = []) {
   ready();
-  const rows = store.listTransactions();
-  if (!since) return rows;
-  if (!isISODate(since)) throw new SpendableError("since should be YYYY-MM-DD.", "bad_date");
-  return rows.filter((txn) => {
-    const iso = postedToISO(txn.posted);
-    return iso != null && iso >= since;
-  });
+  let rows = store.listTransactions();
+  if (since) {
+    if (!isISODate(since)) throw new SpendableError("since should be YYYY-MM-DD.", "bad_date");
+    rows = rows.filter((txn) => {
+      const iso = postedToISO(txn.posted);
+      return iso != null && iso >= since;
+    });
+  }
+  if (conditions.length === 0) return rows;
+  const accounts = new Map(store.listAccounts().map((account) => [account.id, accountTitle(account)]));
+  const payees = store.payeeNamesByDescription();
+  return rows.filter((txn) =>
+    conditions.every((filter) => chargeMatches(filter, txn, accounts.get(txn.accountId) ?? "", payees.get(txn.description) ?? txn.description)),
+  );
+}
+
+export function listSavedFilters(): { name: string; conditions: ChargeFilter[] }[] {
+  ready();
+  const groups = new Map<string, ChargeFilter[]>();
+  for (const row of store.listFilterRows()) {
+    const filter = decodeFilter(`${row.field}\t${row.op}\t${row.value}`);
+    if (!filter) continue;
+    const list = groups.get(row.name) ?? [];
+    list.push(filter);
+    groups.set(row.name, list);
+  }
+  return [...groups].map(([name, conditions]) => ({ name, conditions }));
+}
+
+export function readSavedFilter(name: string): ChargeFilter[] {
+  return listSavedFilters().find((filter) => filter.name === name)?.conditions ?? [];
+}
+
+export function saveNamedFilter(name: string, conditions: { field: string; op: string; value: string }[]): string {
+  ready();
+  const cleaned = sanitizeLabel(name, 40);
+  if (!cleaned) throw new SpendableError("A filter needs a name.", "bad_filter");
+  if (conditions.length === 0) throw new SpendableError("Add a condition.", "bad_filter");
+  if (conditions.length > 8) throw new SpendableError("Eight conditions.", "bad_filter");
+  const rows = conditions.map((condition) => normalizeFilter(condition));
+  store.withTransaction(() => store.replaceFilter(cleaned, rows));
+  return cleaned;
+}
+
+export function removeNamedFilter(name: string): void {
+  ready();
+  const cleaned = sanitizeLabel(name, 40);
+  if (!cleaned || store.deleteFilter(cleaned) === 0) throw new SpendableError("No filter with that name.", "not_found", 404);
 }
 
 export function getSettings(): Settings {
