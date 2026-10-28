@@ -19,6 +19,7 @@ import {
   editCharges,
   encodeFilter,
   establishPassword,
+  importCharges,
   listAccounts,
   listCategories,
   listPayees,
@@ -142,6 +143,29 @@ export async function importBackup(formData: FormData) {
   await clearSession();
   refresh();
   redirect(passwordIsSet() ? "/login" : "/onboarding");
+}
+
+export async function importFile(formData: FormData) {
+  await requirePage();
+  const file = formData.get("file");
+  try {
+    if (!(file instanceof File) || file.size === 0) throw new SpendableError("Choose a file.", "bad_import");
+    if (file.size > 2_000_000) throw new SpendableError("That file is too big.", "bad_import");
+    importCharges({
+      accountId: String(formData.get("account") ?? ""),
+      text: await file.text(),
+      name: file.name,
+      date: String(formData.get("date") ?? ""),
+      sign: String(formData.get("sign") ?? ""),
+      dateColumn: String(formData.get("dateColumn") ?? ""),
+      amountColumn: String(formData.get("amountColumn") ?? ""),
+      payeeColumn: String(formData.get("payeeColumn") ?? ""),
+    });
+  } catch (error) {
+    await bail("/bank", error);
+  }
+  refresh();
+  redirect("/?notice=imported");
 }
 
 export async function connectBank(formData: FormData) {

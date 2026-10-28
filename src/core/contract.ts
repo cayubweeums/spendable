@@ -43,5 +43,6 @@ export const apiContract = {
     { method: "POST", path: "/api/v1/sync/reset", purpose: "Drop the copied charges and balances, pull them again, and run the rules. Rules and settings stay." },
     { method: "GET", path: "/api/v1/backup", purpose: "Download a zip of the server data. The database inside stays encrypted." },
     { method: "POST", path: "/api/v1/backup", purpose: "Replace the server data with a zip from GET /api/v1/backup. The current session ends." },
+    { method: "POST", path: "/api/v1/import", purpose: "Import charges from csv, qif, ofx, or qfx onto one account. Body: accountId, text, name, date (mdy, dmy, ymd), sign (as or flip), dateColumn, amountColumn, payeeColumn. Does not change a balance." },
   ],
 } as const;

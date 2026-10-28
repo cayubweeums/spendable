@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { accountTitle, inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
-import { isISODate, localISODate, postedToISO, type PaydayFrequency } from "./dates";
+import { isISODate, isoToLocalNoonUnix, localISODate, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
+import { parseImport } from "./import";
 import { decimalToCents } from "./money";
 import { hashPassword, passwordMatches } from "./password";
 import { unzipDatabase, zipDatabase } from "./zip";
@@ -263,6 +264,52 @@ export function transactionsCsv(): string {
     );
   }
   return `${lines.join("\n")}\n`;
+}
+
+export function importCharges(input: {
+  accountId: string;
+  text: string;
+  name: string;
+  date: string;
+  sign: string;
+  dateColumn: string;
+  amountColumn: string;
+  payeeColumn: string;
+}): { imported: number } {
+  ready();
+  if (!store.getAccount(input.accountId)) throw new SpendableError("No account with that id.", "not_found", 404);
+  const ext = input.name.toLowerCase().split(".").pop();
+  if (ext !== "csv" && ext !== "qif" && ext !== "ofx" && ext !== "qfx") {
+    throw new SpendableError("Use a csv, qif, ofx, or qfx file.", "bad_import");
+  }
+  if (input.date !== "mdy" && input.date !== "dmy" && input.date !== "ymd") {
+    throw new SpendableError("Not a choice.", "bad_display");
+  }
+  if (input.sign !== "as" && input.sign !== "flip") throw new SpendableError("Not a choice.", "bad_display");
+  const rows = parseImport(input.text, {
+    kind: ext,
+    date: input.date as DateFormat,
+    sign: input.sign,
+    dateColumn: input.dateColumn,
+    amountColumn: input.amountColumn,
+    payeeColumn: input.payeeColumn,
+  });
+  store.withTransaction(() => {
+    for (const row of rows) {
+      store.insertTransaction({
+        id: `import_${randomUUID()}`,
+        accountId: input.accountId,
+        posted: isoToLocalNoonUnix(row.posted),
+        amountCents: row.amountCents,
+        description: row.description,
+        pending: false,
+        category: null,
+      });
+    }
+    store.applyImportedRules();
+    store.applyCategoryRules();
+  });
+  return { imported: rows.length };
 }
 
 export function listTransactions(since?: string, conditions: ChargeFilter[] = []) {

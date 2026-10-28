@@ -1,9 +1,10 @@
-import { connectBank, disconnectBank, importBackup, loadSample, resetBank } from "../../actions";
+import { connectBank, disconnectBank, importBackup, importFile, loadSample, resetBank } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncScheduleForm } from "@/components/sync-schedule";
-import { connectionStatus } from "@/core/service";
+import { accountTitle } from "@/core/bank";
+import { connectionStatus, listAccounts } from "@/core/service";
 
 export default async function BankPage({
   searchParams,
@@ -12,6 +13,7 @@ export default async function BankPage({
 }) {
   const query = await searchParams;
   const status = connectionStatus();
+  const accounts = listAccounts();
   return (
     <>
       <ReadFlash notice={query.notice} />
@@ -65,6 +67,55 @@ export default async function BankPage({
           <SubmitButton pending="Importing…">Import zip</SubmitButton>
         </form>
       </section>
+      <form action={importFile} className="section stack">
+        <h2>Import</h2>
+        <label>
+          Account
+          <select name="account" required defaultValue={accounts[0]?.id ?? ""}>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountTitle(account)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          File
+          <input name="file" type="file" accept=".csv,.qif,.ofx,.qfx,text/csv" required />
+        </label>
+        <div className="row">
+          <label>
+            Format
+            <select name="date" defaultValue="mdy">
+              <option value="mdy">Month day</option>
+              <option value="dmy">Day month</option>
+              <option value="ymd">Year first</option>
+            </select>
+          </label>
+          <label>
+            Sign
+            <select name="sign" defaultValue="as">
+              <option value="as">As written</option>
+              <option value="flip">Flip</option>
+            </select>
+          </label>
+        </div>
+        <div className="row">
+          <label>
+            Date
+            <input name="dateColumn" defaultValue="date" aria-label="Date column" />
+          </label>
+          <label>
+            Amount
+            <input name="amountColumn" defaultValue="amount" aria-label="Amount column" />
+          </label>
+          <label>
+            Payee
+            <input name="payeeColumn" defaultValue="payee" aria-label="Payee column" />
+          </label>
+        </div>
+        <SubmitButton pending="Importing…">Import</SubmitButton>
+      </form>
       <div className="section row">
         {status.connected ? (
           <>
