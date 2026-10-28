@@ -1024,19 +1024,13 @@ function syncStart(lastSyncAt: string | null): number {
   return Math.max(earliest, last - 5 * 86_400);
 }
 
-export async function sync(): Promise<{ syncedAt: string; accounts: number; errors: string[] }> {
-  ready();
-  const connection = store.getConnection();
-  if (!connection) throw new SpendableError("Connect a bank before syncing.", "not_connected");
-  let result: Awaited<ReturnType<typeof fetchAccountSet>>;
-  try {
-    result = await fetchAccountSet(connection.accessUrl, syncStart(connection.lastSyncAt));
-  } catch (error) {
-    console.error(scrubSecrets(error instanceof Error ? error.stack ?? error.message : String(error)));
-    throw error;
-  }
-  const syncedAt = new Date().toISOString();
+function applyAccountSet(
+  result: Awaited<ReturnType<typeof fetchAccountSet>>,
+  syncedAt: string,
+  fresh: boolean,
+): { syncedAt: string; accounts: number; errors: string[] } {
   store.withTransaction(() => {
+    if (fresh) store.clearCopiedLedger();
     for (const remote of result.accounts) {
       const existing = store.getAccount(remote.id);
       const kept = mergeBankAccount(existing, remote.name);
@@ -1070,6 +1064,32 @@ export async function sync(): Promise<{ syncedAt: string; accounts: number; erro
     store.markSynced(syncedAt, result.errors);
   });
   return { syncedAt, accounts: result.accounts.length, errors: result.errors };
+}
+
+async function pullAccounts(accessUrl: string, since: number): Promise<Awaited<ReturnType<typeof fetchAccountSet>>> {
+  try {
+    return await fetchAccountSet(accessUrl, since);
+  } catch (error) {
+    console.error(scrubSecrets(error instanceof Error ? error.stack ?? error.message : String(error)));
+    throw error;
+  }
+}
+
+export async function sync(): Promise<{ syncedAt: string; accounts: number; errors: string[] }> {
+  ready();
+  const connection = store.getConnection();
+  if (!connection) throw new SpendableError("Connect a bank before syncing.", "not_connected");
+  const result = await pullAccounts(connection.accessUrl, syncStart(connection.lastSyncAt));
+  return applyAccountSet(result, new Date().toISOString(), false);
+}
+
+// shortcut: hand notes, tags, splits, and copies go with the dropped charges. An account the bank omits stays at zero.
+export async function resetSync(): Promise<{ syncedAt: string; accounts: number; errors: string[] }> {
+  ready();
+  const connection = store.getConnection();
+  if (!connection) throw new SpendableError("Connect a bank before syncing.", "not_connected");
+  const result = await pullAccounts(connection.accessUrl, syncStart(null));
+  return applyAccountSet(result, new Date().toISOString(), true);
 }
 
 export async function connect(setupToken: string): Promise<{ syncedAt: string; accounts: number; errors: string[] }> {
