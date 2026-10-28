@@ -1,10 +1,10 @@
-import { connectBank, disconnectBank, importBackup, importFile, loadSample, resetBank } from "../../actions";
+import { addUser, connectBank, disconnectBank, importBackup, importFile, loadSample, resetBank } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncScheduleForm } from "@/components/sync-schedule";
 import { accountTitle } from "@/core/bank";
-import { connectionStatus, listAccounts } from "@/core/service";
+import { connectionStatus, isAdmin, listAccounts } from "@/core/service";
 
 export default async function BankPage({
   searchParams,
@@ -137,6 +137,20 @@ export default async function BankPage({
           </button>
         </form>
       </div>
+      {isAdmin() ? (
+        <form action={addUser} className="section stack">
+          <h2>Users</h2>
+          <label>
+            Name
+            <input name="name" required maxLength={40} />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" required minLength={8} maxLength={128} autoComplete="new-password" />
+          </label>
+          <SubmitButton pending="Adding…">Add</SubmitButton>
+        </form>
+      ) : null}
     </>
   );
 }

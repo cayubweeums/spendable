@@ -65,6 +65,6 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign
 - [x] Skip a transaction that is already imported, and use the bank date when a hand-entered one matches
 - [x] Import a YNAB4 or nYNAB file
-- [ ] The first user is the admin. Later accounts come from that admin, or from sign-up when the container allows it. A new account starts with a temporary password and must set a new one before it continues. Each user sees only their own data, encrypted with the password they set.
+- [x] The first user is the admin. Later accounts come from that admin, or from sign-up when the container allows it. A new account starts with a temporary password and must set a new one before it continues. Each user sees only their own data, encrypted with the password they set.
 - [ ] A layout that fits a phone
 - [ ] An MCP server that can do everything the app can do. It calls the same actions the app calls, and it does not keep a second copy of the rules.
