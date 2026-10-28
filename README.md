@@ -26,45 +26,76 @@ docker compose up -d
 
 Open http://127.0.0.1:3000.
 
-## Planned features
+## MCP
 
-Checked items are in the app. The rest are not built yet, and they are listed in the order to build them.
+On the Bank page, name a token and choose New. It is shown once. Revoke sits on that token and leaves the others. Last used updates when that token calls the app. Paste it below as `Bearer PASTE`. After a restart, sign in again in the browser. The same token works once the app is open. The endpoint is `http://127.0.0.1:3000/api/mcp`. Tools are the API routes. `get_contract` lists them. Put a path id in `id` or `name`, query fields in `query`, and the JSON object in `body`.
 
-- [x] Copy balances from SimpleFIN
-- [x] Show how much can be spent right now without rewriting bank balances
-- [x] Choose which accounts to follow and set account type
-- [x] Category rules for later transactions
-- [x] Monthly bills that stay on until turned off
-- [x] Show those bills on a calendar through the next payday
-- [x] Compare this pay cycle with the last one
-- [x] Docker install
-- [x] Require a password before the app opens
-- [x] Encrypt the data with the login password, and decrypt it after login. The server does not keep that key.
-- [x] Download a zip of the server data, and import that zip later
-- [x] Turn bank sync on or off, and choose how often it runs and when
-- [x] Rename an account and keep a note on it
-- [x] Categories, with groups, rename, merge, delete, hide, and notes
-- [x] Payees: rename, merge, favorite, and a default category
-- [x] Notes on transactions, categories, and accounts
-- [x] Tags on transactions. A tag is only a label. A rule can set one.
-- [x] Rules that match imported payee, payee, account, category, date, notes, amount, or tag, then set category, payee, notes, or tag. Rules run in order, before and after import.
-- [x] Saving a category or payee can create a rule for the next import. That can be turned off.
-- [x] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
-- [x] Split one transaction across categories
-- [x] Undo an edit
-- [x] Filters that stack, and that you can save
-- [x] Edit or duplicate several transactions at once
-- [x] Merge two duplicate transactions and keep the fields that were filled in
-- [x] Projected income, savings, and expenses on a repeating date. They count in the spendable number until a bank transaction matches the rule for that projection. Then they count as actual, and the bank figure stays the bank figure.
-- [x] Show how far under or over the month landed against the spendable number. That display does not change the number. It is there so most of the amount can stay unspent.
-- [x] Reset sync: drop the copied transactions and balances, pull them again from the bank, and run the rules again. Rules and settings stay.
-- [x] Reports for a calendar of income and expenses, spending over a period, a summary total, net worth, and cash flow
-- [x] Hide amounts on screen
-- [x] Date format, number format, first day of the week, and hiding cents
-- [x] Export transactions as CSV
-- [x] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign
-- [x] Skip a transaction that is already imported, and use the bank date when a hand-entered one matches
-- [x] Import a YNAB4 or nYNAB file
-- [x] The first user is the admin. Later accounts come from that admin, or from sign-up when the container allows it. A new account starts with a temporary password and must set a new one before it continues. Each user sees only their own data, encrypted with the password they set.
-- [x] A layout that fits a phone
-- [x] An MCP server that can do everything the app can do. It calls the same actions the app calls, and it does not keep a second copy of the rules.
+### Cursor
+
+`~/.cursor/mcp.json`
+
+```json
+{
+  "mcpServers": {
+    "spendable": {
+      "url": "http://127.0.0.1:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer PASTE"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add --transport http spendable http://127.0.0.1:3000/api/mcp \
+  --header "Authorization: Bearer PASTE"
+```
+
+### VS Code
+
+`.vscode/mcp.json`
+
+```json
+{
+  "servers": {
+    "spendable": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer PASTE"
+      }
+    }
+  }
+}
+```
+
+### Codex
+
+`~/.codex/config.toml`
+
+```toml
+[mcp_servers.spendable]
+url = "http://127.0.0.1:3000/api/mcp"
+http_headers = { Authorization = "Bearer PASTE" }
+```
+
+### Claude Desktop
+
+Settings, Developer, Edit Config. Desktop cannot attach a header to localhost, so this starts a local proxy.
+
+```json
+{
+  "mcpServers": {
+    "spendable": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:3000/api/mcp", "--header", "Authorization:${SPENDABLE_TOKEN}"],
+      "env": {
+        "SPENDABLE_TOKEN": "Bearer PASTE"
+      }
+    }
+  }
+}
+```

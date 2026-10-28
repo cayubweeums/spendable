@@ -1,7 +1,6 @@
 import { SpendableError } from "@/core/errors";
-import { cookieValue } from "@/core/gate";
-import { guard, handle, readJson } from "@/core/http";
-import { SESSION_COOKIE, copyCharges, decodeFilter, editCharges, listTransactions, mergeCharges, sessionIsOpen, transactionsCsv } from "@/core/service";
+import { guard, handle, readJson, requestIsOpen } from "@/core/http";
+import { copyCharges, decodeFilter, editCharges, listTransactions, mergeCharges, transactionsCsv } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,7 +8,7 @@ export const runtime = "nodejs";
 export function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("format") === "csv") {
-    if (!sessionIsOpen(cookieValue(request.headers.get("cookie"), SESSION_COOKIE))) {
+    if (!requestIsOpen(request)) {
       return handle(() => {
         throw new SpendableError("Sign in first.", "unauthorized", 401);
       });

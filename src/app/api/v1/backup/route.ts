@@ -1,13 +1,12 @@
-import { cookieValue } from "@/core/gate";
-import { handle } from "@/core/http";
+import { handle, requestIsOpen } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { SESSION_COOKIE, downloadBackup, restoreBackup, sessionIsOpen } from "@/core/service";
+import { downloadBackup, restoreBackup } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 function signedIn(request: Request): boolean {
-  return sessionIsOpen(cookieValue(request.headers.get("cookie"), SESSION_COOKIE));
+  return requestIsOpen(request);
 }
 
 export function GET(request: Request) {

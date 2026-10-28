@@ -80,6 +80,36 @@ test("mcp snapshot is the app snapshot and leaves the balance", async () => {
     assert.equal(json.result.isError, false);
     assert.equal(JSON.parse(json.result.content[0].text).spendableCents, service.getSnapshot().spendableCents);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, before);
+    const access = service.issueAccessToken("Cursor");
+    const other = service.issueAccessToken("Claude");
+    assert.equal(service.listAccessTokens().some((row) => row.name === "Cursor" && row.lastUsed == null), true);
+    assert.throws(() => service.issueAccessToken("cursor"), (error: Error & { code?: string }) => error.code === "bad_token");
+    const viaToken = await POST(
+      new Request("http://127.0.0.1/api/mcp", {
+        method: "POST",
+        headers: { authorization: `Bearer ${access.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_snapshot", arguments: {} } }),
+      }),
+    );
+    const tokenJson = (await viaToken.json()) as { result: { isError: boolean; content: { text: string }[] } };
+    assert.equal(tokenJson.result.isError, false);
+    assert.equal(JSON.parse(tokenJson.result.content[0].text).spendableCents, service.getSnapshot().spendableCents);
+    assert.equal(service.listAccessTokens().find((row) => row.name === "Cursor")?.lastUsed != null, true);
+    assert.equal(service.listAccessTokens().find((row) => row.name === "Claude")?.lastUsed, null);
+    service.revokeAccessToken("Cursor");
+    assert.equal(service.accessTokenMatches(`Bearer ${access.token}`), false);
+    assert.equal(service.accessTokenMatches(`Bearer ${other.token}`), true);
+    service.revokeAccessToken("Claude");
+    const revoked = await POST(
+      new Request("http://127.0.0.1/api/mcp", {
+        method: "POST",
+        headers: { authorization: `Bearer ${other.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_snapshot", arguments: {} } }),
+      }),
+    );
+    const revokedJson = (await revoked.json()) as { result: { isError: boolean } };
+    assert.equal(revokedJson.result.isError, true);
+    assert.equal(store.getAccount("demo_checking")?.balanceCents, before);
     service.closeSession(token);
   } finally {
     store.closeDb();

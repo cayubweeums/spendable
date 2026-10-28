@@ -21,6 +21,8 @@ import {
   editCharges,
   encodeFilter,
   establishPassword,
+  issueAccessToken,
+  revokeAccessToken,
   importCharges,
   importYnab,
   listAccounts,
@@ -153,6 +155,28 @@ export async function changePassword(formData: FormData) {
   }
   refresh();
   redirect(needsOnboarding() ? "/onboarding?step=bank" : "/");
+}
+
+export async function issueToken(_state: { name: string; token: string } | null, formData: FormData) {
+  await requirePage();
+  try {
+    const issued = issueAccessToken(String(formData.get("name") ?? ""));
+    refresh();
+    return issued;
+  } catch (error) {
+    return await bail("/bank", error);
+  }
+}
+
+export async function revokeToken(formData: FormData) {
+  await requirePage();
+  try {
+    revokeAccessToken(String(formData.get("name") ?? ""));
+  } catch (error) {
+    await bail("/bank", error);
+  }
+  refresh();
+  redirect("/bank");
 }
 
 export async function addUser(formData: FormData) {
