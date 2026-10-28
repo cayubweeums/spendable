@@ -4,7 +4,7 @@ import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { eachDate, formatLong, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { PLAN_KINDS, getSnapshot, listBills, listProjections } from "@/core/service";
+import { PLAN_KINDS, amountsHidden, getSnapshot, listBills, listProjections } from "@/core/service";
 
 function dayLabel(iso: string, first: boolean, payday: boolean): string {
   const date = new Date(`${iso}T00:00:00Z`);
@@ -25,7 +25,7 @@ export default async function BillsPage({
   const bills = listBills();
   const plans = listProjections();
   const snapshot = getSnapshot();
-  const money = (cents: number) => formatMoney(cents, snapshot.currency);
+  const money = (cents: number) => formatMoney(cents, snapshot.currency, amountsHidden());
   const days = eachDate(snapshot.today, snapshot.nextPayday);
   const held = snapshot.receipt.lines.filter((line) => line.when);
   const buffer = snapshot.receipt.lines.find((line) => line.kind === "sub" && !line.when);
@@ -82,7 +82,7 @@ export default async function BillsPage({
                 {bill.matchText ? <span className="quiet-note"> · repeats</span> : null}
               </span>
               <span className="quiet-note">{ordinal(bill.dueDay)}</span>
-              <span className="num">{formatMoney(bill.amountCents)}</span>
+              <span className="num">{money(bill.amountCents)}</span>
               <form action={deleteBill} className="inline">
                 <input type="hidden" name="id" value={bill.id} />
                 <button className="quiet" type="submit">

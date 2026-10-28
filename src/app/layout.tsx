@@ -6,7 +6,8 @@ import { AutoSync } from "@/components/auto-sync";
 import { Nav } from "@/components/nav";
 import { SubmitButton } from "@/components/submit-button";
 import { SyncForm } from "@/components/sync-form";
-import { connectionStatus, needsOnboarding, passwordIsSet } from "@/core/service";
+import { HideToggle } from "@/components/hide-toggle";
+import { amountsHidden, connectionStatus, needsOnboarding, passwordIsSet } from "@/core/service";
 import "./globals.css";
 
 const display = Fraunces({
@@ -64,6 +65,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   Connect
                 </a>
               )}
+              <HideToggle hidden={amountsHidden()} />
               <form action={signOut} className="inline">
                 <SubmitButton pending="Signing out…" quiet>
                   Sign out

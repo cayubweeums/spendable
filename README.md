@@ -59,7 +59,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Show how far under or over the month landed against the spendable number. That display does not change the number. It is there so most of the amount can stay unspent.
 - [x] Reset sync: drop the copied transactions and balances, pull them again from the bank, and run the rules again. Rules and settings stay.
 - [x] Reports for a calendar of income and expenses, spending over a period, a summary total, net worth, and cash flow
-- [ ] Hide amounts on screen
+- [x] Hide amounts on screen
 - [ ] Date format, number format, first day of the week, and hiding cents
 - [ ] Export transactions as CSV
 - [ ] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign

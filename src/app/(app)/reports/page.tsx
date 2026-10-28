@@ -1,10 +1,10 @@
 import { formatLong } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { getReport } from "@/core/service";
+import { amountsHidden, getReport } from "@/core/service";
 
 export default function ReportsPage() {
   const report = getReport();
-  const money = (cents: number) => formatMoney(cents, report.currency);
+  const money = (cents: number) => formatMoney(cents, report.currency, amountsHidden());
   const name = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(
     new Date(`${report.today}T00:00:00Z`),
   );

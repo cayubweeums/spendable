@@ -1,17 +1,19 @@
 import { accountTitle, kindFromRole } from "@/core/bank";
 import { formatMoney } from "@/core/money";
+import { amountsHidden } from "@/core/service";
 import type { Account } from "@/core/types";
 import { KindFields } from "./kind-fields";
 
 export function AccountFields({ account }: { account: Account }) {
   const kind = account.kind ?? kindFromRole(account.role);
+  const hidden = amountsHidden();
   return (
     <fieldset className="account">
       <legend>{accountTitle(account)}</legend>
       <p className="org">
-        {account.orgName} · {formatMoney(account.balanceCents, account.currency)}
+        {account.orgName} · {formatMoney(account.balanceCents, account.currency, hidden)}
         {account.availableCents != null && account.availableCents !== account.balanceCents
-          ? ` · available ${formatMoney(account.availableCents, account.currency)}`
+          ? ` · available ${formatMoney(account.availableCents, account.currency, hidden)}`
           : ""}
       </p>
       <label>

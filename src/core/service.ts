@@ -147,6 +147,7 @@ export function getSnapshot(): Snapshot {
     bills: store.listBills(),
     projections: store.listProjections(),
     transactions: store.listTransactions(),
+    hideAmounts: store.getMeta("hide_amounts") === "1",
   });
 }
 
@@ -286,6 +287,17 @@ export function removeNamedFilter(name: string): void {
 export function getSettings(): Settings {
   ready();
   return store.readSettings();
+}
+
+export function amountsHidden(): boolean {
+  ready();
+  return store.getMeta("hide_amounts") === "1";
+}
+
+// shortcut: the pace chart still draws the shape, and amount inputs stay filled. The API still returns cents.
+export function setAmountsHidden(on: boolean): void {
+  ready();
+  store.setMeta("hide_amounts", on ? "1" : "0");
 }
 
 export function needsOnboarding(): boolean {
