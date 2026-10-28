@@ -148,6 +148,7 @@ export function getSnapshot(): Snapshot {
     projections: store.listProjections(),
     transactions: store.listTransactions(),
     hideAmounts: store.getMeta("hide_amounts") === "1",
+    dateFormat: getDisplay().date,
   });
 }
 
@@ -284,9 +285,43 @@ export function removeNamedFilter(name: string): void {
   if (!cleaned || store.deleteFilter(cleaned) === 0) throw new SpendableError("No filter with that name.", "not_found", 404);
 }
 
-export function getSettings(): Settings {
+export type Display = {
+  date: "mdy" | "dmy" | "ymd";
+  number: "us" | "eu";
+  weekStart: 0 | 1;
+  hideCents: boolean;
+};
+
+export function getDisplay(): Display {
   ready();
-  return store.readSettings();
+  const date = store.getMeta("date_format", "mdy");
+  const number = store.getMeta("number_format", "us");
+  return {
+    date: date === "dmy" || date === "ymd" ? date : "mdy",
+    number: number === "eu" ? "eu" : "us",
+    weekStart: store.getMeta("week_start", "0") === "1" ? 1 : 0,
+    hideCents: store.getMeta("hide_cents") === "1",
+  };
+}
+
+// shortcut: amount fields stay with a dot. Hiding cents rounds the figure. The cents stay stored. Week start marks the payday strip.
+export function saveDisplay(input: { date: string; number: string; weekStart: string; hideCents: boolean }): Display {
+  ready();
+  if (input.date !== "mdy" && input.date !== "dmy" && input.date !== "ymd") {
+    throw new SpendableError("Not a choice.", "bad_display");
+  }
+  if (input.number !== "us" && input.number !== "eu") throw new SpendableError("Not a choice.", "bad_display");
+  if (input.weekStart !== "0" && input.weekStart !== "1") throw new SpendableError("Not a choice.", "bad_display");
+  store.setMeta("date_format", input.date);
+  store.setMeta("number_format", input.number);
+  store.setMeta("week_start", input.weekStart);
+  store.setMeta("hide_cents", input.hideCents ? "1" : "0");
+  return getDisplay();
+}
+
+export function getSettings(): Settings & Display {
+  ready();
+  return { ...store.readSettings(), ...getDisplay() };
 }
 
 export function amountsHidden(): boolean {

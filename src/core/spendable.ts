@@ -8,6 +8,7 @@ import {
   nextPayday,
   postedToISO,
   previousPayday,
+  type DateFormat,
 } from "./dates";
 import type { Account, Bill, Projection, Settings, Snapshot, Transaction } from "./types";
 
@@ -26,6 +27,7 @@ type Input = Settings & {
   projections?: Projection[];
   transactions: Transaction[];
   hideAmounts?: boolean;
+  dateFormat?: DateFormat;
 };
 
 function liquidCents(account: Account, transactions: Transaction[]): number {
@@ -154,6 +156,7 @@ export function computeSpendable(input: Input): Snapshot {
     spendAccounts.find((account) => isIsoCurrency(account.currency))?.currency ??
     accounts.find((account) => isIsoCurrency(account.currency))?.currency ??
     "USD";
+  const due = (date: string) => formatLong(date, input.dateFormat ?? "mdy");
 
   const lines: Snapshot["receipt"]["lines"] = [];
   const subs: { when: string; line: Snapshot["receipt"]["lines"][number] }[] = [];
@@ -197,7 +200,7 @@ export function computeSpendable(input: Input): Snapshot {
         line: {
           kind: "sub",
           label: bill.name,
-          detail: `Due ${formatLong(date)}`,
+          detail: `Due ${due(date)}`,
           cents: -bill.amountCents,
           when: date,
         },
@@ -216,7 +219,7 @@ export function computeSpendable(input: Input): Snapshot {
         line: {
           kind: plan.kind === "income" ? "add" : "sub",
           label: plan.name,
-          detail: `Due ${formatLong(date)}`,
+          detail: `Due ${due(date)}`,
           cents: signed,
           when: date,
         },
@@ -238,7 +241,7 @@ export function computeSpendable(input: Input): Snapshot {
         line: {
           kind: "sub",
           label: account.payMode === "full" ? `${accountTitle(account)} payment` : `${accountTitle(account)} minimum`,
-          detail: `Due ${formatLong(date)}`,
+          detail: `Due ${due(date)}`,
           cents: -payment,
           when: date,
         },
