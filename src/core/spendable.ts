@@ -25,6 +25,7 @@ type Input = Settings & {
   bills: Bill[];
   projections?: Projection[];
   transactions: Transaction[];
+  hideAmounts?: boolean;
 };
 
 function liquidCents(account: Account, transactions: Transaction[]): number {
@@ -172,7 +173,9 @@ export function computeSpendable(input: Input): Snapshot {
     liquid += available;
     const detail =
       account.availableCents != null && account.availableCents !== account.balanceCents
-        ? `Available. Ledger ${formatMoney(account.balanceCents, account.currency)}`
+        ? input.hideAmounts
+          ? "Available"
+          : `Available. Ledger ${formatMoney(account.balanceCents, account.currency)}`
         : account.availableCents != null
           ? "Reported by the bank"
           : "Ledger balance, with pending charges taken off";

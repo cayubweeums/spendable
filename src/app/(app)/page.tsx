@@ -13,6 +13,7 @@ import {
   encodeFilter,
   FILTER_FIELDS,
   getSettings,
+  amountsHidden,
   getSnapshot,
   listAccounts,
   listBills,
@@ -74,7 +75,8 @@ export default async function HomePage({
           };
         })
     : snapshot.recent;
-  const money = (cents: number) => formatMoney(cents, snapshot.currency);
+  const hidden = amountsHidden();
+  const money = (cents: number) => formatMoney(cents, snapshot.currency, hidden);
   const stamps = [...snapshot.deposits.map((account) => account.balanceDate), ...snapshot.debts.map((account) => account.balanceDate)];
   const asOf = stamps.length > 0 ? Math.max(...stamps) : null;
   const empty = snapshot.deposits.length === 0 && snapshot.debts.length === 0;
@@ -307,7 +309,7 @@ export default async function HomePage({
                           {" "}
                           {txn.pending ? "pending" : txn.posted ? formatLong(txn.posted) : "pending"}
                           {txn.splits.length
-                            ? txn.splits.map((part) => ` · ${part.category} ${formatMoney(part.amountCents, txn.currency)}`)
+                            ? txn.splits.map((part) => ` · ${part.category} ${formatMoney(part.amountCents, txn.currency, hidden)}`)
                             : txn.category
                               ? ` · ${txn.category}`
                               : null}
@@ -382,7 +384,7 @@ export default async function HomePage({
                         </details>
                       </td>
                       <td className="hide-sm quiet-note">{txn.accountName}</td>
-                      <td className={txn.amountCents < 0 ? "num out" : "num"}>{formatMoney(txn.amountCents, txn.currency)}</td>
+                      <td className={txn.amountCents < 0 ? "num out" : "num"}>{formatMoney(txn.amountCents, txn.currency, hidden)}</td>
                     </tr>
                   );
                 })}

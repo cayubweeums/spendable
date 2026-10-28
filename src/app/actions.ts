@@ -38,6 +38,7 @@ import {
   restoreDemo,
   saveNamedFilter,
   saveRules as writeRules,
+  setAmountsHidden,
   setLearnRules,
   saveSyncSchedule,
   saveTransactionDetails,
@@ -168,6 +169,14 @@ export async function saveSync(formData: FormData) {
   }
   refresh();
   redirect("/bank");
+}
+
+export async function hideAmounts(formData: FormData) {
+  await requirePage();
+  setAmountsHidden(formData.get("hide") === "1");
+  const next = String(formData.get("next") ?? "/");
+  refresh();
+  redirect(next.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next : "/");
 }
 
 export async function syncBank() {

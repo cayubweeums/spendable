@@ -101,6 +101,8 @@ a { color: inherit; }
 
 .header-actions form { margin: 0; }
 
+.header-actions .check { margin-top: 0; }
+
 .header-actions button, .header-actions .button {
   background: transparent;
   color: var(--brass);

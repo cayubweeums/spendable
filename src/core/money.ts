@@ -16,7 +16,8 @@ export function isIsoCurrency(currency: string): boolean {
   return /^[A-Z]{3}$/.test(currency);
 }
 
-export function formatMoney(cents: number, currency = "USD"): string {
+export function formatMoney(cents: number, currency = "USD", hidden = false): string {
+  if (hidden) return "••••";
   const negative = cents < 0;
   const absolute = Math.abs(cents) / 100;
   const body = isIsoCurrency(currency)
