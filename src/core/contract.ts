@@ -17,7 +17,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/projections", purpose: "Income, savings, and expenses on a day of the month. They count until a bank charge matches." },
     { method: "POST", path: "/api/v1/projections", purpose: "Add a projection. Body: name, amountCents, dueDay, kind (income, saving, expense), matchText. Does not change a balance." },
     { method: "DELETE", path: "/api/v1/projections/:id", purpose: "Remove a projection. Does not change a balance." },
-    { method: "GET", path: "/api/v1/transactions", purpose: "Transactions copied from the bank. Optional ?since=YYYY-MM-DD. Optional repeated c conditions, and every one must match. Does not change the balance." },
+    { method: "GET", path: "/api/v1/transactions", purpose: "Transactions copied from the bank. Optional ?since=YYYY-MM-DD. Optional repeated c conditions, and every one must match. ?format=csv downloads the charges. Does not change the balance." },
     { method: "GET", path: "/api/v1/filters", purpose: "Saved filters. Each one is conditions that all have to match." },
     { method: "PUT", path: "/api/v1/filters", purpose: "Save a filter. Body: name, and conditions of field, op, and value. Does not change a balance or a charge." },
     { method: "DELETE", path: "/api/v1/filters/:name", purpose: "Delete a saved filter. Leaves the charges." },
