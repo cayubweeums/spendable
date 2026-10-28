@@ -95,6 +95,9 @@ describe("password gate", { concurrency: 1 }, () => {
     assert.equal(gateDecision({ pathname: "/login", method: "POST", signedIn: false, passwordSet: true }), "next");
     assert.equal(gateDecision({ pathname: "/icon", method: "GET", signedIn: false, passwordSet: false }), "next");
     assert.equal(gateDecision({ pathname: "/api/v1/session", method: "POST", signedIn: false, passwordSet: false }), "next");
+    assert.equal(gateDecision({ pathname: "/api/mcp", method: "POST", signedIn: false, passwordSet: true }), "next");
+    assert.equal(gateDecision({ pathname: "/api/mcp", method: "GET", signedIn: false, passwordSet: true }), "unauthorized");
+    assert.equal(gateDecision({ pathname: "/api/mcp", method: "POST", signedIn: true, passwordSet: true, mustChange: true }), "unauthorized");
     assert.equal(gateDecision({ pathname: "/api/v1/flash", method: "DELETE", signedIn: false, passwordSet: false }), "next");
     assert.equal(gateDecision({ pathname: "/api/v1/snapshot", method: "GET", signedIn: true, passwordSet: true }), "next");
     assert.equal(cookieValue("spendable_session=abc%3D; theme=dark", "spendable_session"), "abc=");

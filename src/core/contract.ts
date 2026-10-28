@@ -46,5 +46,6 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/backup", purpose: "Download a zip of the server data. The database inside stays encrypted." },
     { method: "POST", path: "/api/v1/backup", purpose: "Replace the server data with a zip from GET /api/v1/backup. The current session ends." },
     { method: "POST", path: "/api/v1/import", purpose: "Import charges from csv, qif, ofx, qfx, a YNAB plan json, or a ynab4 zip. Body: accountId, text, name, date (mdy, dmy, ymd), sign (as or flip), dateColumn, amountColumn, payeeColumn. A zip may be base64 in data. A YNAB file lands on accounts with the same name. The same account, amount, payee, and date is skipped. Does not change a balance." },
+    { method: "POST", path: "/api/mcp", purpose: "MCP. The session cookie is required. Each tool calls one API route and does not keep its own rules." },
   ],
 } as const;
