@@ -228,6 +228,18 @@ main {
   text-transform: uppercase;
 }
 
+.filter-line, .filter-saved {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  align-items: baseline;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.filter-line form { display: inline-flex; gap: 0.45rem; align-items: baseline; }
+
+.filter-line button.quiet, .filter-saved a { color: var(--forest); }
+
 .lists table.ledger { table-layout: auto; }
 
 .lists table.ledger td.hide-sm { white-space: nowrap; font-size: 0.9rem; }

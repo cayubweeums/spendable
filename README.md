@@ -52,7 +52,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] A rule action can fill notes, date, amount, payee, or cleared status from the transaction
 - [x] Split one transaction across categories
 - [x] Undo an edit
-- [ ] Filters that stack, and that you can save
+- [x] Filters that stack, and that you can save
 - [ ] Edit or duplicate several transactions at once
 - [ ] Merge two duplicate transactions and keep the fields that were filled in
 - [ ] Projected income, savings, and expenses on a repeating date. They count in the spendable number until a bank transaction matches the rule for that projection. Then they count as actual, and the bank figure stays the bank figure.

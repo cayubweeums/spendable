@@ -1,10 +1,15 @@
 import { guard } from "@/core/http";
-import { listTransactions } from "@/core/service";
+import { decodeFilter, listTransactions } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export function GET(request: Request) {
-  const since = new URL(request.url).searchParams.get("since") ?? undefined;
-  return guard(request, () => ({ transactions: listTransactions(since) }));
+  const url = new URL(request.url);
+  const since = url.searchParams.get("since") ?? undefined;
+  const conditions = url.searchParams.getAll("c").flatMap((item) => {
+    const filter = decodeFilter(item);
+    return filter ? [filter] : [];
+  });
+  return guard(request, () => ({ transactions: listTransactions(since, conditions) }));
 }

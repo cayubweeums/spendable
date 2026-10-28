@@ -346,6 +346,15 @@ function ensureColumns(database: DatabaseSync): void {
       category TEXT NOT NULL,
       amount_cents INTEGER NOT NULL
     );
+    -- shortcut: eight conditions, and every one has to match. Or, and a date range, wait.
+    CREATE TABLE IF NOT EXISTS filters (
+      name TEXT NOT NULL,
+      ord INTEGER NOT NULL,
+      field TEXT NOT NULL,
+      op TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (name, ord)
+    );
     CREATE TABLE IF NOT EXISTS match_rules (
       id TEXT PRIMARY KEY,
       ord INTEGER NOT NULL,
@@ -828,6 +837,32 @@ export type StoredPayee = {
   descriptions: string[];
 };
 
+export function payeeNamesByDescription(): Map<string, string> {
+  const rows = db().prepare("SELECT description, name FROM payee_keys").all() as { description: string; name: string }[];
+  return new Map(rows.map((row) => [row.description, row.name]));
+}
+
+export function listFilterRows(): { name: string; field: string; op: string; value: string }[] {
+  return db().prepare("SELECT name, field, op, value FROM filters ORDER BY name, ord").all() as {
+    name: string;
+    field: string;
+    op: string;
+    value: string;
+  }[];
+}
+
+export function replaceFilter(name: string, rows: { field: string; op: string; value: string }[]): void {
+  const database = db();
+  database.prepare("DELETE FROM filters WHERE name = ?").run(name);
+  const insert = database.prepare("INSERT INTO filters (name, ord, field, op, value) VALUES (?, ?, ?, ?, ?)");
+  rows.forEach((row, index) => insert.run(name, index, row.field, row.op, row.value));
+}
+
+export function deleteFilter(name: string): number {
+  const result = db().prepare("DELETE FROM filters WHERE name = ?").run(name);
+  return Number(result.changes ?? 0);
+}
+
 export function listPayees(): StoredPayee[] {
   const database = db();
   database.exec(`
@@ -1209,7 +1244,7 @@ export function deleteConnection(): void {
 
 export function wipeFinancialRows(): void {
   db().exec(
-    "DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
+    "DELETE FROM filters; DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
   );
 }
 
