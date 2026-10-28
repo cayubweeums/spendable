@@ -20,6 +20,7 @@ import {
   encodeFilter,
   establishPassword,
   importCharges,
+  importYnab,
   listAccounts,
   listCategories,
   listPayees,
@@ -53,6 +54,8 @@ import {
   updateSettings,
 } from "@/core/service";
 import { ruleSource } from "@/core/rules";
+import { ynabName } from "@/core/ynab";
+import { MAX_BACKUP_BYTES } from "@/core/zip";
 import type { ChargeFilter } from "@/core/service";
 
 async function bail(path: string, error: unknown): Promise<never> {
@@ -150,8 +153,11 @@ export async function importFile(formData: FormData) {
   const file = formData.get("file");
   try {
     if (!(file instanceof File) || file.size === 0) throw new SpendableError("Choose a file.", "bad_import");
-    if (file.size > 2_000_000) throw new SpendableError("That file is too big.", "bad_import");
-    importCharges({
+    if (ynabName(file.name)) {
+      if (file.size > MAX_BACKUP_BYTES) throw new SpendableError("That file is too big.", "bad_import");
+      importYnab(Buffer.from(await file.arrayBuffer()), file.name);
+    } else if (file.size > 2_000_000) throw new SpendableError("That file is too big.", "bad_import");
+    else importCharges({
       accountId: String(formData.get("account") ?? ""),
       text: await file.text(),
       name: file.name,

@@ -81,7 +81,7 @@ export default async function BankPage({
         </label>
         <label>
           File
-          <input name="file" type="file" accept=".csv,.qif,.ofx,.qfx,text/csv" required />
+          <input name="file" type="file" accept=".csv,.qif,.ofx,.qfx,.json,.zip,.ynab4,text/csv,application/json" required />
         </label>
         <div className="row">
           <label>
