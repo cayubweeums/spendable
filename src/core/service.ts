@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { accountTitle, inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
-import { isISODate, isoToLocalNoonUnix, localISODate, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
+import { diffDays, isISODate, isoToLocalNoonUnix, localISODate, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { parseImport } from "./import";
@@ -294,8 +294,18 @@ export function importCharges(input: {
     amountColumn: input.amountColumn,
     payeeColumn: input.payeeColumn,
   });
+  const seen = new Set(
+    store
+      .listTransactions()
+      .filter((txn) => txn.accountId === input.accountId)
+      .map((txn) => chargeKey(txn.amountCents, txn.description, postedToISO(txn.posted))),
+  );
+  let imported = 0;
   store.withTransaction(() => {
     for (const row of rows) {
+      const key = chargeKey(row.amountCents, row.description, row.posted);
+      if (seen.has(key)) continue;
+      seen.add(key);
       store.insertTransaction({
         id: `import_${randomUUID()}`,
         accountId: input.accountId,
@@ -305,11 +315,38 @@ export function importCharges(input: {
         pending: false,
         category: null,
       });
+      imported += 1;
     }
-    store.applyImportedRules();
-    store.applyCategoryRules();
+    if (imported > 0) {
+      store.applyImportedRules();
+      store.applyCategoryRules();
+    }
   });
-  return { imported: rows.length };
+  return { imported };
+}
+
+function chargeKey(amountCents: number, description: string, iso: string | null): string {
+  return `${amountCents}\t${description}\t${iso ?? ""}`;
+}
+
+// shortcut: same amount and payee within 2 days. A second coffee that week can be the one that matches. A bank row already stored stays beside it.
+function takeBankDate(
+  hands: { id: string; posted: number; amountCents: number; description: string }[],
+  used: Set<string>,
+  txn: { id: string; posted: number; amountCents: number; description: string; pending: boolean },
+): boolean {
+  if (txn.pending || store.getTransaction(txn.id)) return false;
+  const bankIso = postedToISO(txn.posted);
+  if (!bankIso) return false;
+  const match = hands.find((row) => {
+    if (used.has(row.id) || row.amountCents !== txn.amountCents || row.description !== txn.description) return false;
+    const iso = postedToISO(row.posted);
+    return iso != null && Math.abs(diffDays(iso, bankIso)) <= 2;
+  });
+  if (!match) return false;
+  used.add(match.id);
+  store.setTransactionPosted(match.id, txn.posted);
+  return true;
 }
 
 export function listTransactions(since?: string, conditions: ChargeFilter[] = []) {
@@ -1188,7 +1225,10 @@ function applyAccountSet(
         kind,
         tracked: existing ? existing.tracked !== false : true,
       });
+      const hands = store.listTransactions().filter((row) => row.accountId === remote.id && row.id.startsWith("import_"));
+      const used = new Set<string>();
       for (const txn of remote.transactions) {
+        if (takeBankDate(hands, used, txn)) continue;
         store.upsertSyncedTransaction({
           id: txn.id,
           accountId: remote.id,

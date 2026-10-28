@@ -5,7 +5,7 @@ import { sanitizeLabel } from "./sanitize";
 
 export type ImportRow = { posted: string; amountCents: number; description: string };
 
-// shortcut: one account. Commas are thousands separators. OFX dates stay year-first. Duplicate rows wait.
+// shortcut: one account. Commas are thousands separators. OFX dates stay year-first.
 export function parseImport(
   text: string,
   input: {
