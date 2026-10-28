@@ -1,6 +1,6 @@
 import { SpendableError } from "@/core/errors";
 import { guard, readJson } from "@/core/http";
-import { copyCharges, decodeFilter, editCharges, listTransactions } from "@/core/service";
+import { copyCharges, decodeFilter, editCharges, listTransactions, mergeCharges } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +21,7 @@ export function POST(request: Request) {
     if (!Array.isArray(body.ids) || body.ids.some((id) => typeof id !== "string")) {
       throw new SpendableError("Select two charges.", "bad_batch");
     }
+    if (body.merge === true) return { id: mergeCharges(body.ids) };
     if (body.copy === true) return { ids: copyCharges(body.ids) };
     if (body.category != null && typeof body.category !== "string") {
       throw new SpendableError("Select two charges.", "bad_batch");
