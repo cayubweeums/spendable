@@ -62,7 +62,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Hide amounts on screen
 - [x] Date format, number format, first day of the week, and hiding cents
 - [x] Export transactions as CSV
-- [ ] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign
+- [x] Import QIF, OFX, QFX, and CSV, including column mapping, date format, and sign
 - [ ] Skip a transaction that is already imported, and use the bank date when a hand-entered one matches
 - [ ] Import a YNAB4 or nYNAB file
 - [ ] The first user is the admin. Later accounts come from that admin, or from sign-up when the container allows it. A new account starts with a temporary password and must set a new one before it continues. Each user sees only their own data, encrypted with the password they set.
