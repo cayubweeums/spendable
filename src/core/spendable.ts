@@ -35,6 +35,50 @@ function liquidCents(account: Account, transactions: Transaction[]): number {
   return account.balanceCents + pending;
 }
 
+export type MonthReport = {
+  month: string;
+  days: { date: string; incomeCents: number; expenseCents: number }[];
+  incomeCents: number;
+  spendingCents: number;
+  summaryCents: number;
+  netWorthCents: number;
+};
+
+// shortcut: this month, posted charges on spend accounts. A chosen range, and card purchases, wait.
+export function monthReport(
+  transactions: Transaction[],
+  spendIds: Set<string>,
+  today: string,
+  netWorthCents: number,
+): MonthReport {
+  const month = today.slice(0, 7);
+  const byDay = new Map<string, { date: string; incomeCents: number; expenseCents: number }>();
+  let incomeCents = 0;
+  let spendingCents = 0;
+  for (const txn of transactions) {
+    if (!spendIds.has(txn.accountId) || txn.pending || txn.amountCents === 0) continue;
+    const iso = postedToISO(txn.posted);
+    if (!iso?.startsWith(month)) continue;
+    const day = byDay.get(iso) ?? { date: iso, incomeCents: 0, expenseCents: 0 };
+    if (txn.amountCents > 0) {
+      day.incomeCents += txn.amountCents;
+      incomeCents += txn.amountCents;
+    } else {
+      day.expenseCents += -txn.amountCents;
+      spendingCents += -txn.amountCents;
+    }
+    byDay.set(iso, day);
+  }
+  return {
+    month,
+    days: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    incomeCents,
+    spendingCents,
+    summaryCents: incomeCents - spendingCents,
+    netWorthCents,
+  };
+}
+
 // shortcut: today's spendable number, not the one from the first of the month. Outflows on spend accounts. The number stays.
 function monthOutflowCents(transactions: Transaction[], spendIds: Set<string>, today: string): number {
   const month = today.slice(0, 7);

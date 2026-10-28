@@ -19,7 +19,7 @@ import {
 } from "./rules";
 import { sanitizeLabel } from "./sanitize";
 import { claimAccessUrl, fetchAccountSet } from "./simplefin";
-import { computeSpendable } from "./spendable";
+import { computeSpendable, monthReport } from "./spendable";
 import { SYNC_HOUR_CHOICES, syncIsDue, type SyncSchedule } from "./sync-due";
 import type { AccountKind, Category, Payee, PayMode, PlanKind, Role, Settings, Snapshot, Transaction } from "./types";
 
@@ -117,6 +117,20 @@ export function ready(): void {
     store.seedDemo();
     store.setMeta("initialized", "1");
   });
+}
+
+export function getReport() {
+  const snapshot = getSnapshot();
+  const spendIds = new Set(
+    snapshot.deposits
+      .filter((account) => account.role === "spend" && account.currency === snapshot.currency)
+      .map((account) => account.id),
+  );
+  return {
+    ...monthReport(store.listTransactions(), spendIds, snapshot.today, snapshot.depositsCents - snapshot.owedCents),
+    currency: snapshot.currency,
+    today: snapshot.today,
+  };
 }
 
 export function getSnapshot(): Snapshot {
