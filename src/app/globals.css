@@ -570,6 +570,7 @@ button.quiet, .button.quiet {
   margin-top: 0.35rem;
 }
 
+input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0 0.45rem 0 0; padding: 0; border: 0; vertical-align: -0.1rem; }
 .check input { width: 1rem; height: 1rem; margin: 0; }
 
 .actions { margin-top: 1.4rem; }

@@ -994,6 +994,10 @@ export function setTransactionNote(id: string, note: string): number {
   return Number(result.changes ?? 0);
 }
 
+export function setTransactionCleared(id: string, cleared: boolean): void {
+  db().prepare("UPDATE transactions SET cleared = ? WHERE id = ?").run(cleared ? 1 : 0, id);
+}
+
 export function listMatchRules(): MatchRule[] {
   const rows = db()
     .prepare("SELECT id, ord, stage, field, op, value, action, action_value FROM match_rules ORDER BY ord, id")

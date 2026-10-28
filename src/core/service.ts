@@ -854,6 +854,56 @@ export function setTags(id: string, tags: string): void {
   store.setTransactionTags(id, parseTags(tags));
 }
 
+function pickedIds(ids: string[]): string[] {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length < 2) throw new SpendableError("Select two charges.", "bad_batch");
+  return unique;
+}
+
+function chargesFor(ids: string[]): Transaction[] {
+  return ids.map((id) => {
+    const txn = store.getTransaction(id);
+    if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+    return txn;
+  });
+}
+
+// shortcut: one category, or a copy. Neither writes the balance. Undo still covers one charge, not the batch.
+export function editCharges(ids: string[], category: string | null): void {
+  ready();
+  const rows = chargesFor(pickedIds(ids));
+  const cleaned = category == null || category.trim() === "" ? null : sanitizeLabel(category, 40);
+  store.withTransaction(() => {
+    for (const txn of rows) store.setTransactionCategory(txn.id, cleaned);
+  });
+}
+
+export function copyCharges(ids: string[]): string[] {
+  ready();
+  const rows = chargesFor(pickedIds(ids));
+  const created: string[] = [];
+  store.withTransaction(() => {
+    for (const txn of rows) {
+      const copyId = `copy_${randomUUID()}`;
+      store.insertTransaction({
+        id: copyId,
+        accountId: txn.accountId,
+        posted: txn.posted,
+        amountCents: txn.amountCents,
+        description: txn.description,
+        pending: txn.pending,
+        category: txn.category,
+      });
+      store.setTransactionNote(copyId, txn.note ?? "");
+      store.setTransactionTags(copyId, txn.tags ?? []);
+      store.replaceSplits(copyId, txn.splits ?? []);
+      if (txn.cleared) store.setTransactionCleared(copyId, true);
+      created.push(copyId);
+    }
+  });
+  return created;
+}
+
 // shortcut: eight labels, comma-separated. The description rule stores the first. A match rule adds one tag and leaves the rest.
 function parseTags(input: string): string[] {
   const seen = new Set<string>();
