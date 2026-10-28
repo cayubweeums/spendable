@@ -233,6 +233,38 @@ function chargeMatches(filter: ChargeFilter, txn: Transaction, account: string, 
   return ruleMatches(filter, fact);
 }
 
+function csvCell(value: string): string {
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+// shortcut: one row per charge. A split stays in the category cell. The file uses an ISO date and a dot, not the screen format.
+export function transactionsCsv(): string {
+  ready();
+  const accounts = new Map(store.listAccounts().map((account) => [account.id, accountTitle(account)]));
+  const payees = store.payeeNamesByDescription();
+  const lines = ["date,account,payee,amount,category,note,tags"];
+  const rows = [...store.listTransactions()].sort((a, b) => b.posted - a.posted || a.description.localeCompare(b.description));
+  for (const txn of rows) {
+    const category = txn.splits?.length
+      ? txn.splits.map((part) => `${part.category} ${(part.amountCents / 100).toFixed(2)}`).join("; ")
+      : (txn.category ?? "");
+    lines.push(
+      [
+        postedToISO(txn.posted) ?? "",
+        accounts.get(txn.accountId) ?? "",
+        payees.get(txn.description) ?? txn.description,
+        (txn.amountCents / 100).toFixed(2),
+        category,
+        txn.note ?? "",
+        (txn.tags ?? []).join(", "),
+      ]
+        .map(csvCell)
+        .join(","),
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function listTransactions(since?: string, conditions: ChargeFilter[] = []) {
   ready();
   let rows = store.listTransactions();

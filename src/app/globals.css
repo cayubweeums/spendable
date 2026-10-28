@@ -217,11 +217,18 @@ main {
 .charge-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 1rem;
 }
 
-.charge-head .kicker { margin: 0; }
+.charge-head .kicker { margin: 0 auto 0 0; }
+
+.charge-head a {
+  font-family: var(--font-figures);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--forest);
+}
 
 .charge-head button.quiet {
   font-family: var(--font-figures);
