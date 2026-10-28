@@ -35,6 +35,18 @@ function liquidCents(account: Account, transactions: Transaction[]): number {
   return account.balanceCents + pending;
 }
 
+// shortcut: today's spendable number, not the one from the first of the month. Outflows on spend accounts. The number stays.
+function monthOutflowCents(transactions: Transaction[], spendIds: Set<string>, today: string): number {
+  const month = today.slice(0, 7);
+  let spent = 0;
+  for (const txn of transactions) {
+    if (!spendIds.has(txn.accountId) || txn.pending || txn.amountCents >= 0) continue;
+    const iso = postedToISO(txn.posted);
+    if (iso?.startsWith(month)) spent += -txn.amountCents;
+  }
+  return spent;
+}
+
 function cumulativeOutflows(
   transactions: Transaction[],
   spendIds: Set<string>,
@@ -270,6 +282,7 @@ export function computeSpendable(input: Input): Snapshot {
     daysUntilPayday,
     perDayCents: Math.trunc(spendableCents / daysUntilPayday),
     spendableCents,
+    monthGapCents: spendableCents - monthOutflowCents(transactions, spendIds, input.today),
     depositsCents: deposits
       .filter((account) => account.currency === currency)
       .reduce((sum, account) => sum + account.ledgerCents, 0),

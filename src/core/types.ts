@@ -97,6 +97,7 @@ export type Snapshot = {
   daysUntilPayday: number;
   perDayCents: number;
   spendableCents: number;
+  monthGapCents: number;
   depositsCents: number;
   owedCents: number;
   deposits: {
