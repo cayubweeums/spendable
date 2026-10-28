@@ -998,6 +998,13 @@ export function setTransactionCleared(id: string, cleared: boolean): void {
   db().prepare("UPDATE transactions SET cleared = ? WHERE id = ?").run(cleared ? 1 : 0, id);
 }
 
+export function deleteTransaction(id: string): void {
+  const database = db();
+  database.prepare("DELETE FROM splits WHERE transaction_id = ?").run(id);
+  database.prepare("DELETE FROM transaction_tags WHERE transaction_id = ?").run(id);
+  database.prepare("DELETE FROM transactions WHERE id = ?").run(id);
+}
+
 export function listMatchRules(): MatchRule[] {
   const rows = db()
     .prepare("SELECT id, ord, stage, field, op, value, action, action_value FROM match_rules ORDER BY ord, id")

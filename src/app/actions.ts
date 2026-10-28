@@ -22,6 +22,7 @@ import {
   listCategories,
   listPayees,
   mergeCategory,
+  mergeCharges,
   mergePayee,
   needsOnboarding,
   normalizeFilter,
@@ -313,6 +314,7 @@ export async function batchCharges(formData: FormData) {
   const ids = formData.getAll("id").map(String);
   try {
     if (formData.get("intent") === "copy") copyCharges(ids);
+    else if (formData.get("intent") === "merge") mergeCharges(ids);
     else editCharges(ids, String(formData.get("category") ?? ""));
   } catch (error) {
     await bail(filterHref(name, stack), error);

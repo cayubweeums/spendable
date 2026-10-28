@@ -54,7 +54,7 @@ Checked items are in the app. The rest are not built yet, and they are listed in
 - [x] Undo an edit
 - [x] Filters that stack, and that you can save
 - [x] Edit or duplicate several transactions at once
-- [ ] Merge two duplicate transactions and keep the fields that were filled in
+- [x] Merge two duplicate transactions and keep the fields that were filled in
 - [ ] Projected income, savings, and expenses on a repeating date. They count in the spendable number until a bank transaction matches the rule for that projection. Then they count as actual, and the bank figure stays the bank figure.
 - [ ] Show how far under or over the month landed against the spendable number. That display does not change the number. It is there so most of the amount can stay unspent.
 - [ ] Reset sync: drop the copied transactions and balances, pull them again from the bank, and run the rules again. Rules and settings stay.

@@ -904,6 +904,32 @@ export function copyCharges(ids: string[]): string[] {
   return created;
 }
 
+// shortcut: two charges. A blank field is filled from the other. The bank row stays when the other is a copy. The amount stays. A deleted bank row comes back on sync.
+export function mergeCharges(ids: string[]): string {
+  ready();
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length !== 2) throw new SpendableError("Select two charges.", "bad_batch");
+  const [first, second] = chargesFor(unique);
+  if (first.accountId !== second.accountId) throw new SpendableError("Those charges are on different accounts.", "bad_batch");
+  const keep = first.id.startsWith("copy_") && !second.id.startsWith("copy_") ? second : first;
+  const drop = keep.id === first.id ? second : first;
+  store.withTransaction(() => {
+    const splits = drop.splits ?? [];
+    const sum = splits.reduce((total, part) => total + part.amountCents, 0);
+    if ((keep.splits ?? []).length === 0 && splits.length >= 2 && sum === keep.amountCents) {
+      store.replaceSplits(keep.id, splits);
+      store.setTransactionCategory(keep.id, null);
+    } else if (!keep.category && (keep.splits ?? []).length === 0 && drop.category) {
+      store.setTransactionCategory(keep.id, drop.category);
+    }
+    if (!(keep.note ?? "").trim() && (drop.note ?? "").trim()) store.setTransactionNote(keep.id, drop.note ?? "");
+    if ((keep.tags ?? []).length === 0 && (drop.tags ?? []).length > 0) store.setTransactionTags(keep.id, (drop.tags ?? []).slice(0, 8));
+    if (!keep.cleared && drop.cleared) store.setTransactionCleared(keep.id, true);
+    store.deleteTransaction(drop.id);
+  });
+  return keep.id;
+}
+
 // shortcut: eight labels, comma-separated. The description rule stores the first. A match rule adds one tag and leaves the rest.
 function parseTags(input: string): string[] {
   const seen = new Set<string>();

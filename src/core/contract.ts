@@ -17,7 +17,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/filters", purpose: "Saved filters. Each one is conditions that all have to match." },
     { method: "PUT", path: "/api/v1/filters", purpose: "Save a filter. Body: name, and conditions of field, op, and value. Does not change a balance or a charge." },
     { method: "DELETE", path: "/api/v1/filters/:name", purpose: "Delete a saved filter. Leaves the charges." },
-    { method: "POST", path: "/api/v1/transactions", purpose: "Set one category on several charges, or copy them. Body: ids, and category or copy: true. Does not change the balance or a bank amount." },
+    { method: "POST", path: "/api/v1/transactions", purpose: "Set one category on several charges, copy them, or merge two. A merge keeps a field that was filled in. Body: ids, and category, copy: true, or merge: true. Does not change the balance or a bank amount." },
     { method: "PATCH", path: "/api/v1/transactions/:id", purpose: "Set or clear a category, a note, tags, or a split. A split is parts of the same charge. Does not change the balance or the bank amount." },
     { method: "POST", path: "/api/v1/undo", purpose: "Undo the last charge edit: category, note, tags, and split. A rule or a bill from that save stays. Does not change the balance or the bank amount." },
     { method: "GET", path: "/api/v1/categories", purpose: "Categories, their groups, notes, and which are hidden." },

@@ -262,6 +262,9 @@ export default async function HomePage({
               <button className="quiet" name="intent" value="copy" type="submit">
                 Copy
               </button>
+              <button className="quiet" name="intent" value="merge" type="submit">
+                Merge
+              </button>
             </form>
             <datalist id="categories">
               {categoryNames.map((name) => (
