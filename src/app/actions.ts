@@ -9,11 +9,13 @@ import {
   completeOnboarding,
   connect,
   connectionStatus,
+  copyCharges,
   createBill,
   createCategory,
   disconnect,
   decodeFilter,
   dollarsToCents,
+  editCharges,
   encodeFilter,
   establishPassword,
   listAccounts,
@@ -302,6 +304,21 @@ export async function savePayees(formData: FormData) {
   }
   refresh();
   redirect("/payees");
+}
+
+export async function batchCharges(formData: FormData) {
+  await requirePage();
+  const name = String(formData.get("name") ?? "");
+  const stack = stackFromForm(formData);
+  const ids = formData.getAll("id").map(String);
+  try {
+    if (formData.get("intent") === "copy") copyCharges(ids);
+    else editCharges(ids, String(formData.get("category") ?? ""));
+  } catch (error) {
+    await bail(filterHref(name, stack), error);
+  }
+  refresh();
+  redirect(filterHref(name, stack));
 }
 
 export async function saveTransaction(formData: FormData) {

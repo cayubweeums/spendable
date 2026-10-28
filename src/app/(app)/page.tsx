@@ -1,4 +1,4 @@
-import { addFilter, dropFilter, forgetFilter, keepFilter, saveSettings, saveTransaction, undoTransaction } from "../actions";
+import { addFilter, batchCharges, dropFilter, forgetFilter, keepFilter, saveSettings, saveTransaction, undoTransaction } from "../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { PaceChart, paceCaption } from "@/components/pace-chart";
@@ -249,6 +249,20 @@ export default async function HomePage({
                 ))}
               </p>
             ) : null}
+            <form id="batch" action={batchCharges} className="row">
+              {named ? <input type="hidden" name="name" value={named} /> : null}
+              {conditions.map((filter, index) => (
+                <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
+              ))}
+              <label>
+                Category
+                <input name="category" list="categories" maxLength={40} />
+              </label>
+              <SubmitButton pending="Saving…">Apply</SubmitButton>
+              <button className="quiet" name="intent" value="copy" type="submit">
+                Copy
+              </button>
+            </form>
             <datalist id="categories">
               {categoryNames.map((name) => (
                 <option key={name} value={name} />
@@ -272,6 +286,13 @@ export default async function HomePage({
                   return (
                     <tr key={txn.id}>
                       <td>
+                        <input
+                          type="checkbox"
+                          name="id"
+                          value={txn.id}
+                          form="batch"
+                          aria-label={`Select ${payeeName.get(txn.description) ?? txn.description}`}
+                        />
                         {payeeName.get(txn.description) ?? txn.description}
                         <span className="quiet-note">
                           {" "}
