@@ -1292,6 +1292,12 @@ export function deleteConnection(): void {
   db().prepare("DELETE FROM connection WHERE id = 1").run();
 }
 
+export function clearCopiedLedger(): void {
+  const database = db();
+  database.exec("DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions;");
+  database.prepare("UPDATE accounts SET balance_cents = 0, available_cents = NULL").run();
+}
+
 export function wipeFinancialRows(): void {
   db().exec(
     "DELETE FROM filters; DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM projections; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",

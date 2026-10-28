@@ -34,6 +34,7 @@ import {
   removeNamedFilter,
   removeMatchRule,
   restoreBackup,
+  resetSync,
   restoreDemo,
   saveNamedFilter,
   saveRules as writeRules,
@@ -175,6 +176,17 @@ export async function syncBank() {
     await sync();
   } catch (error) {
     await bail("/", error);
+  }
+  refresh();
+  redirect("/?notice=synced");
+}
+
+export async function resetBank() {
+  await requirePage();
+  try {
+    await resetSync();
+  } catch (error) {
+    await bail("/bank", error);
   }
   refresh();
   redirect("/?notice=synced");

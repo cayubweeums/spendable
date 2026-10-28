@@ -1,4 +1,4 @@
-import { connectBank, disconnectBank, importBackup, loadSample } from "../../actions";
+import { connectBank, disconnectBank, importBackup, loadSample, resetBank } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
@@ -67,11 +67,18 @@ export default async function BankPage({
       </section>
       <div className="section row">
         {status.connected ? (
-          <form action={disconnectBank}>
-            <button className="quiet" type="submit">
-              Forget the connection
-            </button>
-          </form>
+          <>
+            <form action={resetBank}>
+              <button className="quiet" type="submit">
+                Reset
+              </button>
+            </form>
+            <form action={disconnectBank}>
+              <button className="quiet" type="submit">
+                Forget the connection
+              </button>
+            </form>
+          </>
         ) : null}
         <form action={loadSample}>
           <button className="quiet" type="submit">
