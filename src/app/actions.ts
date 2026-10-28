@@ -36,6 +36,7 @@ import {
   restoreBackup,
   resetSync,
   restoreDemo,
+  saveDisplay,
   saveNamedFilter,
   saveRules as writeRules,
   setAmountsHidden,
@@ -560,6 +561,12 @@ export async function deleteRule(formData: FormData) {
 export async function saveSettings(formData: FormData) {
   await requirePage();
   try {
+    saveDisplay({
+      date: String(formData.get("date") ?? "mdy"),
+      number: String(formData.get("number") ?? "us"),
+      weekStart: String(formData.get("week") ?? "0"),
+      hideCents: formData.get("cents") !== "1",
+    });
     const bufferRaw = String(formData.get("buffer") ?? "").trim();
     updateSettings({
       paydayFrequency: String(formData.get("frequency") ?? ""),

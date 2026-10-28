@@ -76,7 +76,8 @@ export default async function HomePage({
         })
     : snapshot.recent;
   const hidden = amountsHidden();
-  const money = (cents: number) => formatMoney(cents, snapshot.currency, hidden);
+  const money = (cents: number, currency = snapshot.currency) => formatMoney(cents, currency, hidden, settings);
+  const day = (iso: string) => formatLong(iso, settings.date);
   const stamps = [...snapshot.deposits.map((account) => account.balanceDate), ...snapshot.debts.map((account) => account.balanceDate)];
   const asOf = stamps.length > 0 ? Math.max(...stamps) : null;
   const empty = snapshot.deposits.length === 0 && snapshot.debts.length === 0;
@@ -123,8 +124,8 @@ export default async function HomePage({
           </p>
           <p className="allowance">
             {snapshot.spendableCents < 0
-              ? `Short ${money(-snapshot.spendableCents)} before ${formatLong(snapshot.nextPayday)}.`
-              : `${money(snapshot.perDayCents)} a day until ${formatLong(snapshot.nextPayday)}.`}
+              ? `Short ${money(-snapshot.spendableCents)} before ${day(snapshot.nextPayday)}.`
+              : `${money(snapshot.perDayCents)} a day until ${day(snapshot.nextPayday)}.`}
           </p>
           <p className="allowance">{monthLine(snapshot.today, snapshot.monthGapCents, money)}</p>
           <p className="principle">Balances are copied from the bank. Nothing here changes them.</p>
@@ -161,7 +162,7 @@ export default async function HomePage({
             <p className="totals">
               <span>On deposit <strong>{money(snapshot.depositsCents)}</strong></span>
               <span>Owed on cards <strong>{money(snapshot.owedCents)}</strong></span>
-              <span>{asOf ? `As of ${formatTimestamp(asOf)}` : null}</span>
+              <span>{asOf ? `As of ${formatTimestamp(asOf, settings.date)}` : null}</span>
             </p>
           </section>
 
@@ -307,9 +308,9 @@ export default async function HomePage({
                         {payeeName.get(txn.description) ?? txn.description}
                         <span className="quiet-note">
                           {" "}
-                          {txn.pending ? "pending" : txn.posted ? formatLong(txn.posted) : "pending"}
+                          {txn.pending ? "pending" : txn.posted ? day(txn.posted) : "pending"}
                           {txn.splits.length
-                            ? txn.splits.map((part) => ` · ${part.category} ${formatMoney(part.amountCents, txn.currency, hidden)}`)
+                            ? txn.splits.map((part) => ` · ${part.category} ${money(part.amountCents, txn.currency)}`)
                             : txn.category
                               ? ` · ${txn.category}`
                               : null}
@@ -384,7 +385,7 @@ export default async function HomePage({
                         </details>
                       </td>
                       <td className="hide-sm quiet-note">{txn.accountName}</td>
-                      <td className={txn.amountCents < 0 ? "num out" : "num"}>{formatMoney(txn.amountCents, txn.currency, hidden)}</td>
+                      <td className={txn.amountCents < 0 ? "num out" : "num"}>{money(txn.amountCents, txn.currency)}</td>
                     </tr>
                   );
                 })}
@@ -414,7 +415,7 @@ export default async function HomePage({
       </div>
 
       <section className="section">
-        <p className="kicker">Since {formatLong(snapshot.previousPayday)}</p>
+        <p className="kicker">Since {day(snapshot.previousPayday)}</p>
         <h2>What already left</h2>
         <p>{paceCaption(snapshot)} Unpaid bills stay in the sum above.</p>
         <PaceChart snapshot={snapshot} />
@@ -448,6 +449,35 @@ export default async function HomePage({
             <label>
               Buffer to leave untouched
               <input name="buffer" inputMode="decimal" defaultValue={(settings.bufferCents / 100).toFixed(2)} />
+            </label>
+          </div>
+          <h2>Figures</h2>
+          <div className="row">
+            <label>
+              Date
+              <select name="date" defaultValue={settings.date}>
+                <option value="mdy">Oct 28</option>
+                <option value="dmy">28 Oct</option>
+                <option value="ymd">2026-10-28</option>
+              </select>
+            </label>
+            <label>
+              Number
+              <select name="number" defaultValue={settings.number}>
+                <option value="us">1,234.56</option>
+                <option value="eu">1.234,56</option>
+              </select>
+            </label>
+            <label>
+              Week
+              <select name="week" defaultValue={String(settings.weekStart)}>
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+              </select>
+            </label>
+            <label className="check">
+              <input type="checkbox" name="cents" value="1" defaultChecked={!settings.hideCents} />
+              Cents
             </label>
           </div>
           <PendingNote>Updating the answer.</PendingNote>

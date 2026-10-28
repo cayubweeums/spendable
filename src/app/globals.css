@@ -309,6 +309,8 @@ main {
 
 .runway .now .d { color: var(--ink); font-weight: 500; }
 
+.runway .week .d { color: var(--forest); }
+
 .runway .pay { background: var(--paper-deep); }
 
 .runway .pay .d, .runway .pay p { color: var(--forest); }

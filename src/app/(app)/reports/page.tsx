@@ -1,10 +1,11 @@
 import { formatLong } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { amountsHidden, getReport } from "@/core/service";
+import { amountsHidden, getReport, getSettings } from "@/core/service";
 
 export default function ReportsPage() {
   const report = getReport();
-  const money = (cents: number) => formatMoney(cents, report.currency, amountsHidden());
+  const settings = getSettings();
+  const money = (cents: number) => formatMoney(cents, report.currency, amountsHidden(), settings);
   const name = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(
     new Date(`${report.today}T00:00:00Z`),
   );
@@ -38,7 +39,7 @@ export default function ReportsPage() {
               ) : (
                 report.days.map((day) => (
                   <tr key={day.date}>
-                    <td>{formatLong(day.date)}</td>
+                    <td>{formatLong(day.date, settings.date)}</td>
                     <td className="num">{money(day.incomeCents)}</td>
                     <td className={day.expenseCents > 0 ? "num out" : "num"}>{money(day.expenseCents)}</td>
                   </tr>

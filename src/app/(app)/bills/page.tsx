@@ -2,9 +2,9 @@ import { addBill, addPlan, deleteBill, removePlan } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
-import { eachDate, formatLong, ordinal } from "@/core/dates";
+import { eachDate, formatLong, ordinal, weekdayIndex } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { PLAN_KINDS, amountsHidden, getSnapshot, listBills, listProjections } from "@/core/service";
+import { PLAN_KINDS, amountsHidden, getSettings, getSnapshot, listBills, listProjections } from "@/core/service";
 
 function dayLabel(iso: string, first: boolean, payday: boolean): string {
   const date = new Date(`${iso}T00:00:00Z`);
@@ -25,7 +25,9 @@ export default async function BillsPage({
   const bills = listBills();
   const plans = listProjections();
   const snapshot = getSnapshot();
-  const money = (cents: number) => formatMoney(cents, snapshot.currency, amountsHidden());
+  const settings = getSettings();
+  const money = (cents: number) => formatMoney(cents, snapshot.currency, amountsHidden(), settings);
+  const day = (iso: string) => formatLong(iso, settings.date);
   const days = eachDate(snapshot.today, snapshot.nextPayday);
   const held = snapshot.receipt.lines.filter((line) => line.when);
   const buffer = snapshot.receipt.lines.find((line) => line.kind === "sub" && !line.when);
@@ -38,19 +40,26 @@ export default async function BillsPage({
         <p className={snapshot.spendableCents < 0 ? "figure short" : "figure"}>{money(snapshot.spendableCents)}</p>
         <p className="allowance">
           {snapshot.spendableCents < 0
-            ? `Short before payday, ${formatLong(snapshot.nextPayday)}.`
+            ? `Short before payday, ${day(snapshot.nextPayday)}.`
             : `${money(snapshot.perDayCents)} a day for ${snapshot.daysUntilPayday} days.`}
         </p>
       </div>
 
-      <ol className="runway" aria-label={`Today to payday, ${formatLong(snapshot.nextPayday)}`}>
+      <ol className="runway" aria-label={`Today to payday, ${day(snapshot.nextPayday)}`}>
         {days.map((iso, index) => {
           const payday = iso === snapshot.nextPayday;
           const hits = held.filter((line) => line.when === iso);
-          const classes = [index === 0 ? "now" : "", payday ? "pay" : "", hits.length > 0 ? "hit" : ""].join(" ").trim();
+          const classes = [
+            index === 0 ? "now" : "",
+            payday ? "pay" : "",
+            hits.length > 0 ? "hit" : "",
+            weekdayIndex(iso) === settings.weekStart ? "week" : "",
+          ]
+            .join(" ")
+            .trim();
           return (
             <li key={iso} className={classes || undefined}>
-              <span className="d" title={formatLong(iso)}>
+              <span className="d" title={day(iso)}>
                 {dayLabel(iso, index === 0, payday)}
               </span>
               {hits.map((line) => (

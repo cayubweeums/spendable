@@ -1,9 +1,9 @@
 import { formatMoney } from "@/core/money";
-import { amountsHidden } from "@/core/service";
+import { amountsHidden, getSettings } from "@/core/service";
 import type { Snapshot } from "@/core/types";
 
 export function paceCaption(snapshot: Snapshot): string {
-  const money = (cents: number) => formatMoney(cents, snapshot.currency, amountsHidden());
+  const money = (cents: number) => formatMoney(cents, snapshot.currency, amountsHidden(), getSettings());
   return `Day ${snapshot.pace.dayNumber} of ${snapshot.pace.cycleDays}. ${money(snapshot.pace.thisSoFarCents)} has left spend accounts. At this point last cycle, ${money(snapshot.pace.lastAtSameDayCents)} had left.`;
 }
 

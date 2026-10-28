@@ -30,14 +30,28 @@ export function diffDays(fromIso: string, toIso: string): number {
   return Math.round((to - from) / 86_400_000);
 }
 
-export function formatLong(iso: string): string {
+export type DateFormat = "mdy" | "dmy" | "ymd";
+
+export function weekdayIndex(iso: string): number {
   const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+export function formatLong(iso: string, format: DateFormat = "mdy"): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (format === "ymd") return iso;
+  const weekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date);
+  if (format === "dmy") {
+    const monthName = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(date);
+    return `${weekday}, ${day} ${monthName}`;
+  }
   return new Intl.DateTimeFormat("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, month - 1, day)));
+  }).format(date);
 }
 
 export function ordinal(day: number): string {
@@ -45,13 +59,18 @@ export function ordinal(day: number): string {
   return `${day}${tail}`;
 }
 
-export function formatTimestamp(unix: number): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(unix * 1000));
+export function formatTimestamp(unix: number, format: DateFormat = "mdy"): string {
+  const date = new Date(unix * 1000);
+  if (format === "mdy") {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date);
+  }
+  const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(date);
+  return `${formatLong(localISODate(date), format)}, ${time}`;
 }
 
 export function isoToLocalNoonUnix(iso: string): number {

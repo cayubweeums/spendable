@@ -16,15 +16,26 @@ export function isIsoCurrency(currency: string): boolean {
   return /^[A-Z]{3}$/.test(currency);
 }
 
-export function formatMoney(cents: number, currency = "USD", hidden = false): string {
+export type NumberFormat = "us" | "eu";
+
+export function formatMoney(
+  cents: number,
+  currency = "USD",
+  hidden = false,
+  shape?: { number?: NumberFormat; hideCents?: boolean },
+): string {
   if (hidden) return "••••";
   const negative = cents < 0;
   const absolute = Math.abs(cents) / 100;
+  const hideCents = shape?.hideCents === true;
+  const digits = hideCents ? 0 : 2;
   const body = isIsoCurrency(currency)
-    ? new Intl.NumberFormat("en-US", {
+    ? new Intl.NumberFormat(shape?.number === "eu" ? "de-DE" : "en-US", {
         style: "currency",
         currency,
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits,
       }).format(absolute)
-    : `${absolute.toFixed(2)} units`;
+    : `${hideCents ? Math.round(absolute).toFixed(0) : absolute.toFixed(2)} units`;
   return negative ? `−${body}` : body;
 }
