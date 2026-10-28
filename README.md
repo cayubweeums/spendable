@@ -28,7 +28,7 @@ Open http://127.0.0.1:3000.
 
 ## MCP
 
-On the Bank page, name a token and choose New. It is shown once. Revoke sits on that token and leaves the others. Last used updates when that token calls the app. Paste it below as `Bearer PASTE`. After a restart, sign in again in the browser. The same token works once the app is open. The endpoint is `http://127.0.0.1:3000/api/mcp`. Tools are the API routes. `get_contract` lists them. Put a path id in `id` or `name`, query fields in `query`, and the JSON object in `body`.
+After setting up an account, Bank -> New -> name your token and provide it to your agent of choice via the details below.
 
 ### Cursor
 
@@ -80,6 +80,18 @@ claude mcp add --transport http spendable http://127.0.0.1:3000/api/mcp \
 [mcp_servers.spendable]
 url = "http://127.0.0.1:3000/api/mcp"
 http_headers = { Authorization = "Bearer PASTE" }
+```
+
+### Hermes
+
+`~/.hermes/config.yaml`
+
+```yaml
+mcp_servers:
+  spendable:
+    url: "http://127.0.0.1:3000/api/mcp"
+    headers:
+      Authorization: "Bearer PASTE"
 ```
 
 ### Claude Desktop
