@@ -12,6 +12,7 @@ import {
   copyCharges,
   createBill,
   createCategory,
+  createProjection,
   disconnect,
   decodeFilter,
   dollarsToCents,
@@ -29,6 +30,7 @@ import {
   passwordIsSet,
   removeBill,
   removeCategory,
+  removeProjection,
   removeNamedFilter,
   removeMatchRule,
   restoreBackup,
@@ -431,6 +433,34 @@ export async function deleteBill(formData: FormData) {
   await requirePage();
   try {
     removeBill(String(formData.get("id") ?? ""));
+  } catch (error) {
+    await bail("/bills", error);
+  }
+  refresh();
+  redirect("/bills?notice=saved");
+}
+
+export async function addPlan(formData: FormData) {
+  await requirePage();
+  try {
+    createProjection({
+      name: String(formData.get("name") ?? ""),
+      amountCents: dollarsToCents(String(formData.get("amount") ?? ""), "Amount"),
+      dueDay: Number(formData.get("dueDay")),
+      kind: String(formData.get("kind") ?? ""),
+      matchText: String(formData.get("match") ?? ""),
+    });
+  } catch (error) {
+    await bail("/bills", error);
+  }
+  refresh();
+  redirect("/bills?notice=saved");
+}
+
+export async function removePlan(formData: FormData) {
+  await requirePage();
+  try {
+    removeProjection(String(formData.get("id") ?? ""));
   } catch (error) {
     await bail("/bills", error);
   }

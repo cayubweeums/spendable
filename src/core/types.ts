@@ -65,11 +65,22 @@ export type Settings = {
   bufferCents: number;
 };
 
+export type PlanKind = "income" | "saving" | "expense";
+
+export type Projection = {
+  id: string;
+  name: string;
+  amountCents: number;
+  dueDay: number;
+  kind: PlanKind;
+  matchText: string;
+};
+
 export type ReceiptLine = {
   label: string;
   detail: string;
   cents: number;
-  kind: "bank" | "sub";
+  kind: "bank" | "sub" | "add";
   when?: string;
 };
 

@@ -1,10 +1,10 @@
-import { addBill, deleteBill } from "../../actions";
+import { addBill, addPlan, deleteBill, removePlan } from "../../actions";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { eachDate, formatLong, ordinal } from "@/core/dates";
 import { formatMoney } from "@/core/money";
-import { getSnapshot, listBills } from "@/core/service";
+import { PLAN_KINDS, getSnapshot, listBills, listProjections } from "@/core/service";
 
 function dayLabel(iso: string, first: boolean, payday: boolean): string {
   const date = new Date(`${iso}T00:00:00Z`);
@@ -23,10 +23,11 @@ export default async function BillsPage({
 }) {
   const query = await searchParams;
   const bills = listBills();
+  const plans = listProjections();
   const snapshot = getSnapshot();
   const money = (cents: number) => formatMoney(cents, snapshot.currency);
   const days = eachDate(snapshot.today, snapshot.nextPayday);
-  const held = snapshot.receipt.lines.filter((line) => line.kind === "sub" && line.when);
+  const held = snapshot.receipt.lines.filter((line) => line.when);
   const buffer = snapshot.receipt.lines.find((line) => line.kind === "sub" && !line.when);
 
   return (
@@ -111,6 +112,64 @@ export default async function BillsPage({
         </div>
         <PendingNote>Adding the bill.</PendingNote>
         <SubmitButton pending="Adding…">Add bill</SubmitButton>
+      </form>
+
+      <section className="section">
+        <h2>Plans</h2>
+        <ul className="rows">
+          {plans.map((plan) => (
+            <li key={plan.id}>
+              <span>
+                {plan.name}
+                <span className="quiet-note"> · {PLAN_KINDS.find(([id]) => id === plan.kind)?.[1]}</span>
+              </span>
+              <span className="quiet-note">
+                {ordinal(plan.dueDay)}
+                {plan.matchText ? ` · ${plan.matchText}` : ""}
+              </span>
+              <span className="num">{money(plan.kind === "income" ? plan.amountCents : -plan.amountCents)}</span>
+              <form action={removePlan} className="inline">
+                <input type="hidden" name="id" value={plan.id} />
+                <button className="quiet" type="submit">
+                  Remove
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <form action={addPlan} className="section stack">
+        <div className="row">
+          <label>
+            Name
+            <input name="name" required maxLength={80} />
+          </label>
+          <label>
+            Amount
+            <input name="amount" inputMode="decimal" required placeholder="80.00" />
+          </label>
+          <label>
+            Day
+            <input name="dueDay" type="number" min={1} max={31} required />
+          </label>
+          <label>
+            Kind
+            <select name="kind" defaultValue="income">
+              {PLAN_KINDS.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Match
+            <input name="match" maxLength={80} />
+          </label>
+        </div>
+        <PendingNote>Adding the plan.</PendingNote>
+        <SubmitButton pending="Adding…">Add</SubmitButton>
       </form>
     </>
   );

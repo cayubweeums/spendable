@@ -9,7 +9,7 @@ import { isISODate, isoToLocalNoonUnix, postedToISO, type PaydayFrequency } from
 import { decimalToCents } from "./money";
 import { categoryFor, clearedFlag, fillRuleValue, matchingRule, ruleMatches, ruleSource, type CategoryRule, type MatchRule, type RuleStage } from "./rules";
 import { sanitizeLabel } from "./sanitize";
-import type { Account, AccountKind, Bill, PayMode, Role, Settings, Transaction } from "./types";
+import type { Account, AccountKind, Bill, PayMode, Projection, Role, Settings, Transaction } from "./types";
 import { isSeal, openSeal, sealPlaintext, sealWithKey } from "./vault";
 
 type AccountRow = {
@@ -346,6 +346,15 @@ function ensureColumns(database: DatabaseSync): void {
       category TEXT NOT NULL,
       amount_cents INTEGER NOT NULL
     );
+    -- shortcut: a monthly day. One bank match covers the pay period. Weekly waits.
+    CREATE TABLE IF NOT EXISTS projections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      due_day INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      match_text TEXT NOT NULL DEFAULT ''
+    );
     -- shortcut: eight conditions, and every one has to match. Or, and a date range, wait.
     CREATE TABLE IF NOT EXISTS filters (
       name TEXT NOT NULL,
@@ -595,6 +604,36 @@ export function insertBill(bill: Bill): void {
 
 export function deleteBill(id: string): number {
   const result = db().prepare("DELETE FROM bills WHERE id = ?").run(id);
+  return Number(result.changes ?? 0);
+}
+
+export function listProjections(): Projection[] {
+  const rows = db().prepare("SELECT * FROM projections ORDER BY due_day, name COLLATE NOCASE").all() as {
+    id: string;
+    name: string;
+    amount_cents: number;
+    due_day: number;
+    kind: Projection["kind"];
+    match_text: string;
+  }[];
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    amountCents: row.amount_cents,
+    dueDay: row.due_day,
+    kind: row.kind,
+    matchText: row.match_text,
+  }));
+}
+
+export function insertProjection(plan: Projection): void {
+  db()
+    .prepare("INSERT INTO projections (id, name, amount_cents, due_day, kind, match_text) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(plan.id, plan.name, plan.amountCents, plan.dueDay, plan.kind, plan.matchText);
+}
+
+export function deleteProjection(id: string): number {
+  const result = db().prepare("DELETE FROM projections WHERE id = ?").run(id);
   return Number(result.changes ?? 0);
 }
 
@@ -1255,7 +1294,7 @@ export function deleteConnection(): void {
 
 export function wipeFinancialRows(): void {
   db().exec(
-    "DELETE FROM filters; DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
+    "DELETE FROM filters; DELETE FROM match_rules; DELETE FROM splits; DELETE FROM transaction_tags; DELETE FROM transactions; DELETE FROM projections; DELETE FROM bills; DELETE FROM rules; DELETE FROM accounts; DELETE FROM connection;",
   );
 }
 
