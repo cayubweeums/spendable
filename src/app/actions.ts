@@ -13,6 +13,8 @@ import {
   createBill,
   createCategory,
   createProjection,
+  addUser as createUser,
+  changePassword as replacePassword,
   disconnect,
   decodeFilter,
   dollarsToCents,
@@ -27,6 +29,7 @@ import {
   mergeCategory,
   mergeCharges,
   mergePayee,
+  mustChangePassword,
   needsOnboarding,
   normalizeFilter,
   passwordIsSet,
@@ -35,6 +38,7 @@ import {
   removeProjection,
   removeNamedFilter,
   removeMatchRule,
+  registerUser,
   restoreBackup,
   resetSync,
   restoreDemo,
@@ -119,13 +123,47 @@ export async function openApp(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const first = !passwordIsSet();
   try {
-    const token = first ? establishPassword(password, String(formData.get("confirm") ?? "")) : signIn(password);
+    const token = first ? establishPassword(password, String(formData.get("confirm") ?? "")) : signIn(password, String(formData.get("name") ?? ""));
     await writeSession(token);
   } catch (error) {
     await bail(first ? "/onboarding?step=user" : "/login", error);
   }
   refresh();
+  if (mustChangePassword()) redirect("/password");
   redirect(needsOnboarding() ? "/onboarding?step=bank" : "/");
+}
+
+export async function signUp(formData: FormData) {
+  try {
+    const token = registerUser(String(formData.get("name") ?? ""), String(formData.get("password") ?? ""));
+    await writeSession(token);
+  } catch (error) {
+    await bail("/login", error);
+  }
+  refresh();
+  redirect("/password");
+}
+
+export async function changePassword(formData: FormData) {
+  await requirePage();
+  try {
+    replacePassword(String(formData.get("password") ?? ""), String(formData.get("confirm") ?? ""));
+  } catch (error) {
+    await bail("/password", error);
+  }
+  refresh();
+  redirect(needsOnboarding() ? "/onboarding?step=bank" : "/");
+}
+
+export async function addUser(formData: FormData) {
+  await requirePage();
+  try {
+    createUser(String(formData.get("name") ?? ""), String(formData.get("password") ?? ""));
+  } catch (error) {
+    await bail("/bank", error);
+  }
+  refresh();
+  redirect("/bank");
 }
 
 export async function signOut() {

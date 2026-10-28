@@ -58,17 +58,51 @@ type ConnectionRow = {
   last_errors: string;
 };
 
-// shortcut: one key for this process, and sign-out drops it. Keep a key per session when a second user exists.
+// shortcut: one unlocked database. A second sign-in closes the first. A key per session waits.
 const globalForDb = globalThis as unknown as {
   spendableDb?: DatabaseSync;
   spendableKey?: Buffer;
   spendableSalt?: Buffer;
+  spendablePath?: string;
   txDepth?: number;
   dirty?: boolean;
 };
 
-function databasePath(): string {
+function adminPath(): string {
   return process.env.SPENDABLE_DB_PATH ?? path.join(process.cwd(), "data", "spendable.db");
+}
+
+function databasePath(): string {
+  return globalForDb.spendablePath ?? adminPath();
+}
+
+export function adminFile(): string {
+  return adminPath();
+}
+
+export function currentFile(): string {
+  return databasePath();
+}
+
+export function isAdminFile(): boolean {
+  return path.resolve(/*turbopackIgnore: true*/ databasePath()) === path.resolve(/*turbopackIgnore: true*/ adminPath());
+}
+
+export function userFile(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!slug) throw new SpendableError("A user needs a name.", "bad_user");
+  return path.join(path.dirname(adminPath()), "users", `${slug}.db`);
+}
+
+export function fileExists(file: string): boolean {
+  return fs.existsSync(file);
+}
+
+export function useFile(file: string): void {
+  const next = path.resolve(/*turbopackIgnore: true*/ file);
+  if (next === path.resolve(/*turbopackIgnore: true*/ databasePath())) return;
+  lock();
+  globalForDb.spendablePath = next === path.resolve(/*turbopackIgnore: true*/ adminPath()) ? undefined : next;
 }
 
 function fileIsSealed(file: string): boolean {
@@ -155,6 +189,31 @@ function openMemory(plain: Uint8Array, key: Buffer, salt: Buffer): void {
   ensureColumns(memory);
 }
 
+export function reseal(password: string): void {
+  const database = db();
+  database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  const plain = Buffer.from(database.serialize());
+  const sealed = sealPlaintext(plain, password);
+  globalForDb.spendableKey?.fill(0);
+  globalForDb.spendableKey = sealed.key;
+  globalForDb.spendableSalt = sealed.salt;
+  atomicWrite(databasePath(), sealed.packed);
+}
+
+export function sealFresh(file: string, password: string, meta: Record<string, string>): void {
+  if (fs.existsSync(file)) throw new SpendableError("That name is taken.", "bad_user");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const memory = new DatabaseSync(":memory:");
+  boot(memory);
+  ensureColumns(memory);
+  const insert = memory.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  for (const [key, value] of Object.entries(meta)) insert.run(key, value);
+  const sealed = sealPlaintext(Buffer.from(memory.serialize()), password);
+  memory.close();
+  atomicWrite(file, sealed.packed);
+  sealed.key.fill(0);
+}
+
 export function seal(password: string): void {
   if (globalForDb.spendableKey) return;
   const database = db();
@@ -223,8 +282,16 @@ export function db(): DatabaseSync {
     if (fileIsSealed(file)) throw new SpendableError("Sign in first.", "locked", 401);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const database = new DatabaseSync(file);
-    database.exec(`
-      PRAGMA journal_mode = WAL;
+    database.exec("PRAGMA journal_mode = WAL;");
+    boot(database);
+    globalForDb.spendableDb = database;
+  }
+  ensureColumns(globalForDb.spendableDb);
+  return globalForDb.spendableDb;
+}
+
+function boot(database: DatabaseSync): void {
+  database.exec(`
       PRAGMA foreign_keys = ON;
       PRAGMA busy_timeout = 2000;
       CREATE TABLE IF NOT EXISTS meta (
@@ -274,10 +341,6 @@ export function db(): DatabaseSync {
       );
       CREATE INDEX IF NOT EXISTS transactions_posted ON transactions (posted DESC);
     `);
-    globalForDb.spendableDb = database;
-  }
-  ensureColumns(globalForDb.spendableDb);
-  return globalForDb.spendableDb;
 }
 
 function tableColumns(database: DatabaseSync, table: string): Set<string> {

@@ -5,7 +5,9 @@ export const apiContract = {
     "Account balances are copied from the bank on sync. Bills, categories, card rules, and the spendable figure are views. They never write account balances.",
   routes: [
     { method: "GET", path: "/api/v1", purpose: "List this contract." },
-    { method: "POST", path: "/api/v1/session", purpose: "Set the password on first use, or sign in. Body: password, and confirm when no password is set yet." },
+    { method: "POST", path: "/api/v1/session", purpose: "Set the password on first use, or sign in. Body: password, optional name, and confirm when no password is set yet." },
+    { method: "POST", path: "/api/v1/users", purpose: "Add a user. The admin sends name and password. Sign-up sends the same when SPENDABLE_SIGNUP=1. The password is temporary. Does not change a balance." },
+    { method: "POST", path: "/api/v1/password", purpose: "Replace the temporary password. Body: password, confirm. Does not change a balance." },
     { method: "DELETE", path: "/api/v1/session", purpose: "Sign out the session that sent this request." },
     { method: "GET", path: "/api/v1/snapshot", purpose: "The answer: bank figures, every subtraction, and what is left to spend. The month gap does not change that number." },
     { method: "GET", path: "/api/v1/reports", purpose: "This month: income and expenses by day, spending, the net, net worth, and cash flow. Does not change a balance." },

@@ -18,10 +18,19 @@ export function gateDecision(input: {
   method: string;
   signedIn: boolean;
   passwordSet: boolean;
-}): "next" | "login" | "onboarding" | "unauthorized" {
+  mustChange?: boolean;
+}): "next" | "login" | "onboarding" | "password" | "unauthorized" {
   if (input.pathname === "/icon") return "next";
   if (input.pathname === "/api/v1/session" && input.method === "POST") return "next";
   if (input.pathname === "/api/v1/flash" && input.method === "DELETE") return "next";
+  if (!input.signedIn && input.pathname === "/api/v1/users" && input.method === "POST") return "next";
+  if (input.signedIn && input.mustChange) {
+    if (input.pathname === "/password") return "next";
+    if (input.pathname === "/api/v1/password" && input.method === "POST") return "next";
+    if (input.pathname === "/api/v1/session" && input.method === "DELETE") return "next";
+    if (input.pathname.startsWith("/api/")) return "unauthorized";
+    return "password";
+  }
   if (input.signedIn) return "next";
   if (!input.passwordSet) {
     if (input.pathname === "/onboarding" || input.pathname === "/login") return "next";

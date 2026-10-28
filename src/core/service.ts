@@ -74,7 +74,13 @@ export function establishPassword(password: string, confirm: string): string {
 }
 
 // shortcut: wrong passwords are not rate limited, add a delay if this port is reachable beyond the host
-export function signIn(password: string): string {
+export function signIn(password: string, name = ""): string {
+  const cleaned = sanitizeLabel(name, 40);
+  if (cleaned) {
+    const file = store.userFile(cleaned);
+    if (!store.fileExists(file)) throw new SpendableError("That password is wrong.", "bad_password", 401);
+    store.useFile(file);
+  } else if (!store.isAdminFile()) store.useFile(store.adminFile());
   if (store.isSealed()) {
     if (!store.isUnlocked()) store.unlock(password);
     else if (!passwordMatches(password, store.getMeta("password_hash"))) {
@@ -87,6 +93,53 @@ export function signIn(password: string): string {
   if (!passwordMatches(password, stored)) throw new SpendableError("That password is wrong.", "bad_password", 401);
   store.seal(password);
   return startSession();
+}
+
+export function isAdmin(): boolean {
+  return store.isUnlocked() && store.isAdminFile();
+}
+
+export function mustChangePassword(): boolean {
+  return store.isUnlocked() && store.getMeta("must_change") === "1";
+}
+
+export function signupOpen(): boolean {
+  return process.env.SPENDABLE_SIGNUP === "1";
+}
+
+function createNamedUser(name: string, password: string): void {
+  assertPassword(password);
+  const cleaned = sanitizeLabel(name, 40);
+  if (!cleaned) throw new SpendableError("A user needs a name.", "bad_user");
+  store.sealFresh(store.userFile(cleaned), password, {
+    initialized: "1",
+    must_change: "1",
+    password_hash: hashPassword(password),
+  });
+}
+
+export function addUser(name: string, password: string): void {
+  if (!isAdmin()) throw new SpendableError("Only the admin can add a user.", "forbidden", 403);
+  createNamedUser(name, password);
+}
+
+export function registerUser(name: string, password: string): string {
+  if (!signupOpen()) throw new SpendableError("Sign-up is off.", "forbidden", 403);
+  createNamedUser(name, password);
+  return signIn(password, name);
+}
+
+export function changePassword(password: string, confirm: string): void {
+  if (!store.isUnlocked()) throw new SpendableError("Sign in first.", "locked", 401);
+  if (!mustChangePassword()) throw new SpendableError("The password is already set.", "password_set");
+  assertPassword(password);
+  if (password !== confirm) throw new SpendableError("Those passwords do not match.", "password_mismatch");
+  if (passwordMatches(password, store.getMeta("password_hash"))) {
+    throw new SpendableError("Choose a new password.", "password_same");
+  }
+  store.setMeta("password_hash", hashPassword(password));
+  store.setMeta("must_change", "0");
+  store.reseal(password);
 }
 
 export function sessionIsOpen(token: string | null | undefined, now = Date.now()): boolean {
