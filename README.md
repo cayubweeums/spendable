@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/logo-lockup.jpg" alt="spendable" width="420">
+</p>
+
 # spendable
 
 Spendable copies balances from SimpleFIN and shows how much you can spend right now. The copied balances stay as the bank reported them.
