@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveSync } from "@/app/actions";
+import { MenuSelect } from "@/components/menu-select";
 import { SubmitButton } from "./submit-button";
 
 const choices = [
@@ -30,13 +31,7 @@ export function SyncScheduleForm({ on, everyHours, at }: { on: boolean; everyHou
         <>
           <label>
             Every
-            <select name="every" defaultValue={String(everyHours)}>
-              {choices.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <MenuSelect name="every" defaultValue={String(everyHours)} label="Every" options={choices} />
           </label>
           <label>
             At

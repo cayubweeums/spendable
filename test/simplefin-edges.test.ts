@@ -70,6 +70,15 @@ describe("account payloads", () => {
     assert.equal(account?.transactions[0]?.id, "CON:chk:same");
   });
 
+  it("hides the recommended date range and keeps a bank message the user can act on", () => {
+    const mapped = mapAccountSet({
+      errlist: [{ msg: "Connection to Northwind may need attention" }],
+      errors: ["Requested date range exceeds recommended range of 45 days."],
+      accounts: [],
+    });
+    assert.deepEqual(mapped.errors, ["Connection to Northwind may need attention"]);
+  });
+
   it("strips markup from bank errors and skips an account with no balance", () => {
     const mapped = mapAccountSet({
       errlist: [{ msg: "<script>alert(1)</script> Try again" }],

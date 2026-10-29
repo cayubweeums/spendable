@@ -103,6 +103,17 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value != null && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
+// shortcut: only this recommended-range sentence is hidden. Upgrade when another bridge warning is noise the user cannot act on.
+export function actionableBankError(message: string): boolean {
+  return !/recommended range of \d+ days/i.test(message);
+}
+
+function pushBankError(errors: string[], message: string): void {
+  const cleaned = sanitizeBankMessage(message);
+  if (!cleaned || !actionableBankError(cleaned)) return;
+  errors.push(cleaned);
+}
+
 export function mapAccountSet(body: unknown): { accounts: RemoteAccount[]; errors: string[] } {
   const record = asRecord(body);
   if (!record || !Array.isArray(record.accounts)) {
@@ -112,12 +123,12 @@ export function mapAccountSet(body: unknown): { accounts: RemoteAccount[]; error
   const errors: string[] = [];
   if (Array.isArray(record.errlist)) {
     for (const item of record.errlist as ErrorItem[]) {
-      if (typeof item?.msg === "string" && item.msg.trim()) errors.push(sanitizeBankMessage(item.msg));
+      if (typeof item?.msg === "string" && item.msg.trim()) pushBankError(errors, item.msg);
     }
   }
   if (Array.isArray(record.errors)) {
     for (const item of record.errors) {
-      if (typeof item === "string" && item.trim()) errors.push(sanitizeBankMessage(item));
+      if (typeof item === "string" && item.trim()) pushBankError(errors, item);
     }
   }
 

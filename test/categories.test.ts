@@ -15,7 +15,16 @@ test("categories can be renamed, merged, hidden, and deleted without moving a ba
   const service = await import("../src/core/service");
   const store = await import("../src/core/db");
   try {
-    service.listCategories();
+    const starters = service.listCategories();
+    assert.equal(starters.find((category) => category.name === "Income")?.group, "Income");
+    assert.equal(starters.some((category) => category.name === "Starting Balances"), false);
+    assert.equal(starters.find((category) => category.name === "Food")?.group, "Usual Expenses");
+    assert.equal(starters.find((category) => category.name === "General")?.group, "Usual Expenses");
+    assert.equal(starters.find((category) => category.name === "Bills")?.group, "Usual Expenses");
+    assert.equal(starters.find((category) => category.name === "Bills (Flexible)")?.group, "Usual Expenses");
+    assert.equal(starters.find((category) => category.name === "Savings")?.group, "Investments and Savings");
+    service.removeCategory("Food");
+    assert.equal(service.listCategories().some((category) => category.name === "Food"), false);
     const balance = store.getAccount("demo_checking")?.balanceCents;
     const coffee = store.listTransactions().find((txn) => txn.category === "Coffee");
     assert.ok(coffee);

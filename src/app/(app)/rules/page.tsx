@@ -1,7 +1,8 @@
-import { deleteRule, saveRules } from "../../actions";
+import { deleteRule, savePayeeRules, saveRules } from "../../actions";
+import { MenuSelect } from "@/components/menu-select";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
-import { learnRules, listMatchRules } from "@/core/service";
+import { learnRules, listCategories, listMatchRules, listPayees } from "@/core/service";
 import { RULE_ACTIONS, RULE_FIELDS, RULE_OPS, RULE_SOURCES, RULE_STAGES, ruleSource, type MatchRule } from "@/core/rules";
 
 function Choice({
@@ -15,15 +16,7 @@ function Choice({
   options: readonly (readonly [string, string])[];
   label: string;
 }) {
-  return (
-    <select name={name} defaultValue={value} aria-label={label}>
-      {options.map(([id, text]) => (
-        <option key={id} value={id}>
-          {text}
-        </option>
-      ))}
-    </select>
-  );
+  return <MenuSelect name={name} defaultValue={value} label={label} options={options} />;
 }
 
 function ruleRow(rule: MatchRule | null, index: number) {
@@ -52,14 +45,12 @@ function ruleRow(rule: MatchRule | null, index: number) {
         <Choice name={`${prefix}action`} value={rule?.action ?? "category"} options={RULE_ACTIONS} label={`${label} set`} />
       </td>
       <td>
-        <select name={`${prefix}from`} defaultValue={from} aria-label={`${label} from`}>
-          <option value="">—</option>
-          {RULE_SOURCES.map(([id, text]) => (
-            <option key={id} value={id}>
-              {text}
-            </option>
-          ))}
-        </select>
+        <MenuSelect
+          name={`${prefix}from`}
+          defaultValue={from}
+          label={`${label} from`}
+          options={[["", "—"], ...RULE_SOURCES]}
+        />
       </td>
       <td>
         <input name={`${prefix}to`} defaultValue={from ? "" : (rule?.actionValue ?? "")} maxLength={280} aria-label={`${label} to`} />
@@ -76,6 +67,17 @@ export default async function RulesPage({
   const query = await searchParams;
   const rules = listMatchRules();
   const learn = learnRules();
+  const categories = listCategories();
+  const openPayees = listPayees().filter(
+    (payee) =>
+      !rules.some(
+        (rule) =>
+          rule.action === "category" &&
+          rule.op === "is" &&
+          rule.field === "payee" &&
+          rule.value.toLowerCase() === payee.name.toLowerCase(),
+      ),
+  );
   return (
     <>
       <ReadFlash notice={query.notice} />
@@ -127,6 +129,38 @@ export default async function RulesPage({
           <input type="hidden" name="id" value={rule.id} />
         </form>
       ))}
+      {openPayees.length > 0 ? (
+        <form action={savePayeeRules} className="section">
+          <h2 className="kicker">Payees</h2>
+          <div className="ledger-scroll">
+            <table className="ledger edit">
+              <thead>
+                <tr>
+                  <th>Payee</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openPayees.map((payee) => (
+                  <tr key={payee.name}>
+                    <td>{payee.name}</td>
+                    <td>
+                      <MenuSelect
+                        name={`category:${payee.name}`}
+                        defaultValue={payee.category}
+                        label={`${payee.name} category`}
+                        creatable
+                        options={[["", ""], ...categories.map((category) => [category.name, category.name] as const)]}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <SubmitButton pending="Saving…">Save</SubmitButton>
+        </form>
+      ) : null}
     </>
   );
 }

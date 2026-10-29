@@ -1,35 +1,54 @@
 "use client";
 
 import { useState } from "react";
+import { MenuSelect } from "@/components/menu-select";
 import { ACCOUNT_KINDS } from "@/core/bank";
 import type { AccountKind, PayMode } from "@/core/types";
 
 export function KindFields({
   id,
   kind,
+  tracked,
   dueDay,
   payMode,
   minimumCents,
 }: {
   id: string;
   kind: AccountKind;
+  tracked: boolean;
   dueDay: number | null;
   payMode: PayMode;
   minimumCents: number;
 }) {
   const [value, setValue] = useState(kind);
+  const [follow, setFollow] = useState(tracked);
   return (
     <>
       <label>
         Type
-        <select name={`kind:${id}`} value={value} onChange={(event) => setValue(event.target.value as AccountKind)}>
-          {ACCOUNT_KINDS.map(([option, label]) => (
-            <option key={option} value={option}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <MenuSelect
+          name={`kind:${id}`}
+          value={value}
+          onValue={(next) => setValue(next as AccountKind)}
+          label="Type"
+          options={ACCOUNT_KINDS}
+        />
       </label>
+      {value === "checking" ? (
+        <label className="check">
+          <input
+            type="checkbox"
+            name={`track:${id}`}
+            value="1"
+            checked={follow}
+            onChange={(event) => setFollow(event.target.checked)}
+          />
+          Follow this account
+        </label>
+      ) : (
+        // An omitted checkbox means unfollow. Other types stay followed.
+        <input type="hidden" name={`track:${id}`} value="1" />
+      )}
       {value === "credit" ? (
         <div className="row">
           <label>
@@ -38,11 +57,16 @@ export function KindFields({
           </label>
           <label>
             Before payday
-            <select name={`pay:${id}`} defaultValue={payMode}>
-              <option value="none">Don&apos;t hold a payment</option>
-              <option value="full">Hold the full balance</option>
-              <option value="minimum">Hold a minimum</option>
-            </select>
+            <MenuSelect
+              name={`pay:${id}`}
+              defaultValue={payMode}
+              label="Before payday"
+              options={[
+                ["none", "Don't hold a payment"],
+                ["full", "Hold the full balance"],
+                ["minimum", "Hold a minimum"],
+              ]}
+            />
           </label>
           <label>
             Minimum

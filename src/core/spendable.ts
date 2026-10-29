@@ -6,6 +6,7 @@ import {
   dueDatesInWindow,
   formatLong,
   nextPayday,
+  observedDueDates,
   postedToISO,
   previousPayday,
   type DateFormat,
@@ -38,9 +39,11 @@ function liquidCents(account: Account, transactions: Transaction[]): number {
   return account.balanceCents + pending;
 }
 
+export type MonthCharge = { payee: string; category: string | null; amountCents: number };
+
 export type MonthReport = {
   month: string;
-  days: { date: string; incomeCents: number; expenseCents: number }[];
+  days: { date: string; incomeCents: number; expenseCents: number; charges: MonthCharge[] }[];
   incomeCents: number;
   spendingCents: number;
   summaryCents: number;
@@ -55,14 +58,15 @@ export function monthReport(
   netWorthCents: number,
 ): MonthReport {
   const month = today.slice(0, 7);
-  const byDay = new Map<string, { date: string; incomeCents: number; expenseCents: number }>();
+  const byDay = new Map<string, { date: string; incomeCents: number; expenseCents: number; charges: MonthCharge[] }>();
   let incomeCents = 0;
   let spendingCents = 0;
   for (const txn of transactions) {
     if (!spendIds.has(txn.accountId) || txn.pending || txn.amountCents === 0) continue;
     const iso = postedToISO(txn.posted);
     if (!iso?.startsWith(month)) continue;
-    const day = byDay.get(iso) ?? { date: iso, incomeCents: 0, expenseCents: 0 };
+    const day = byDay.get(iso) ?? { date: iso, incomeCents: 0, expenseCents: 0, charges: [] };
+    day.charges.push({ payee: txn.description, category: txn.category, amountCents: txn.amountCents });
     if (txn.amountCents > 0) {
       day.incomeCents += txn.amountCents;
       incomeCents += txn.amountCents;
@@ -145,8 +149,9 @@ export function computeSpendable(input: Input): Snapshot {
   const accounts = input.accounts.filter((account) => account.tracked !== false);
   const trackedIds = new Set(accounts.map((account) => account.id));
   const transactions = input.transactions.filter((txn) => trackedIds.has(txn.accountId));
-  const next = nextPayday(input.today, input.paydayFrequency, input.paydayAnchor);
-  const previous = previousPayday(input.today, input.paydayFrequency, input.paydayAnchor);
+  const paydayDays = input.paydayDays ?? [];
+  const next = nextPayday(input.today, input.paydayFrequency, input.paydayAnchor, paydayDays);
+  const previous = previousPayday(input.today, input.paydayFrequency, input.paydayAnchor, paydayDays);
   const daysUntilPayday = Math.max(1, diffDays(input.today, next));
   const cycleDays = Math.max(1, diffDays(previous, next));
   const dayNumber = Math.min(cycleDays, diffDays(previous, input.today) + 1);
@@ -210,7 +215,10 @@ export function computeSpendable(input: Input): Snapshot {
 
   for (const plan of input.projections ?? []) {
     if (projectionRecorded(plan, transactions, previous, input.today)) continue;
-    const dates = dueDatesInWindow(plan.dueDay, input.today, next);
+    const dates =
+      plan.kind === "income"
+        ? observedDueDates(plan.dueDay, input.today, next)
+        : dueDatesInWindow(plan.dueDay, input.today, next);
     const signed = plan.kind === "income" ? plan.amountCents : -plan.amountCents;
     for (const date of dates) {
       liquid += signed;
@@ -256,8 +264,8 @@ export function computeSpendable(input: Input): Snapshot {
     liquid -= input.bufferCents;
     lines.push({
       kind: "sub",
-      label: "Left untouched",
-      detail: "Your buffer",
+      label: "Buffer",
+      detail: "",
       cents: -input.bufferCents,
     });
   }

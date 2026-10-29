@@ -40,6 +40,7 @@ import {
   removeProjection,
   removeNamedFilter,
   removeMatchRule,
+  rulePayee,
   registerUser,
   restoreBackup,
   resetSync,
@@ -125,7 +126,9 @@ export async function openApp(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const first = !passwordIsSet();
   try {
-    const token = first ? establishPassword(password, String(formData.get("confirm") ?? "")) : signIn(password, String(formData.get("name") ?? ""));
+    const token = first
+      ? establishPassword(password, String(formData.get("confirm") ?? ""), String(formData.get("name") ?? ""))
+      : signIn(password, String(formData.get("name") ?? ""));
     await writeSession(token);
   } catch (error) {
     await bail(first ? "/onboarding?step=user" : "/login", error);
@@ -443,18 +446,19 @@ export async function saveTransaction(formData: FormData) {
   await requirePage();
   try {
     const categoryRaw = String(formData.get("category") ?? "");
+    const wantsSplit = categoryRaw === "__split";
     const amounts = formData.getAll("split-amount").map(String);
     const categories = formData.getAll("split-category").map(String);
     saveTransactionDetails({
       id: String(formData.get("id") ?? ""),
-      category: categoryRaw.trim() === "" ? null : categoryRaw,
+      category: wantsSplit ? "__split" : categoryRaw.trim() === "" ? null : categoryRaw,
       contains: String(formData.get("contains") ?? ""),
       remember: formData.get("remember") === "1",
       billable: formData.get("billable") === "1",
       recurring: formData.get("recurring") === "1",
       note: String(formData.get("note") ?? ""),
       tags: String(formData.get("tags") ?? ""),
-      splits: amounts.map((amount, index) => ({ amount, category: categories[index] ?? "" })),
+      splits: wantsSplit ? amounts.map((amount, index) => ({ amount, category: categories[index] ?? "" })) : [],
     });
   } catch (error) {
     await bail("/", error);
@@ -639,6 +643,21 @@ export async function saveRules(formData: FormData) {
   redirect("/rules");
 }
 
+export async function savePayeeRules(formData: FormData) {
+  await requirePage();
+  try {
+    for (const payee of listPayees()) {
+      const category = String(formData.get(`category:${payee.name}`) ?? "").trim();
+      if (!category) continue;
+      rulePayee(payee.name, category);
+    }
+  } catch (error) {
+    await bail("/rules", error);
+  }
+  refresh();
+  redirect("/rules");
+}
+
 export async function deleteRule(formData: FormData) {
   await requirePage();
   try {
@@ -663,6 +682,7 @@ export async function saveSettings(formData: FormData) {
     updateSettings({
       paydayFrequency: String(formData.get("frequency") ?? ""),
       paydayAnchor: String(formData.get("anchor") ?? ""),
+      paydayDays: String(formData.get("days") ?? ""),
       bufferCents: bufferRaw === "" ? 0 : Math.max(0, dollarsToCents(bufferRaw, "Buffer")),
     });
   } catch (error) {

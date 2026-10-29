@@ -9,6 +9,7 @@ import {
   isISODate,
   isoToLocalNoonUnix,
   nextPayday,
+  observedDueDates,
   postedToISO,
   previousPayday,
 } from "../src/core/dates";
@@ -57,9 +58,19 @@ describe("paydays", () => {
   });
 
   it("clamps a 31st payday into February", () => {
-    assert.equal(nextPayday("2026-02-01", "monthly", "2026-01-31"), "2026-02-28");
+    assert.equal(nextPayday("2026-02-01", "monthly", "2026-01-31"), "2026-02-27");
     assert.equal(previousPayday("2026-03-31", "monthly", "2026-01-31"), "2026-03-31");
     assert.equal(nextPayday("2026-03-31", "monthly", "2026-01-31"), "2026-04-30");
+  });
+
+  it("pays on the Friday before a weekend, and on named days of the month", () => {
+    assert.equal(nextPayday("2026-10-22", "weekly", "2026-10-24"), "2026-10-23");
+    assert.equal(previousPayday("2026-10-22", "weekly", "2026-10-24"), "2026-10-16");
+    assert.equal(previousPayday("2026-10-23", "weekly", "2026-10-24"), "2026-10-23");
+    assert.equal(nextPayday("2026-10-20", "days", "2026-01-01", [15, 25]), "2026-10-23");
+    assert.equal(previousPayday("2026-10-20", "days", "2026-01-01", [15, 25]), "2026-10-15");
+    assert.equal(previousPayday("2026-10-23", "days", "2026-01-01", [15, 25]), "2026-10-23");
+    assert.equal(nextPayday("2026-10-23", "days", "2026-01-01", [15, 25]), "2026-11-13");
   });
 });
 
@@ -68,6 +79,8 @@ describe("due dates and posted timestamps", () => {
     assert.deepEqual(dueDatesInWindow(1, "2026-10-27", "2026-11-06"), ["2026-11-01"]);
     assert.deepEqual(dueDatesInWindow(31, "2026-02-01", "2026-02-28"), []);
     assert.deepEqual(dueDatesInWindow(28, "2026-02-01", "2026-03-01"), ["2026-02-28"]);
+    assert.deepEqual(observedDueDates(25, "2026-10-20", "2026-11-13"), ["2026-10-23"]);
+    assert.deepEqual(observedDueDates(25, "2026-10-24", "2026-11-13"), []);
   });
 
   it("treats a UTC midnight timestamp as that civil date", () => {

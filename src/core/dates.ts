@@ -1,4 +1,4 @@
-export type PaydayFrequency = "weekly" | "biweekly" | "monthly";
+export type PaydayFrequency = "weekly" | "biweekly" | "monthly" | "days";
 
 export function localISODate(date = new Date()): string {
   const year = date.getFullYear();
@@ -95,11 +95,23 @@ function clampDay(year: number, monthIndex: number, day: number): string {
   return new Date(Date.UTC(year, monthIndex, clamped)).toISOString().slice(0, 10);
 }
 
-function stepFor(frequency: PaydayFrequency): number {
+function stepFor(frequency: "weekly" | "biweekly"): number {
   return frequency === "weekly" ? 7 : 14;
 }
 
-export function nextPayday(today: string, frequency: PaydayFrequency, anchor: string): string {
+// shortcut: Saturday and Sunday only. Upgrade when a holiday should pay on the Friday before it.
+export function businessDay(iso: string): string {
+  const day = weekdayIndex(iso);
+  if (day === 6) return addDays(iso, -1);
+  if (day === 0) return addDays(iso, -2);
+  return iso;
+}
+
+export function parsePaydayDays(value: string): number[] {
+  return [...new Set(value.split(/[^0-9]+/).map(Number).filter((day) => day >= 1 && day <= 31))].sort((a, b) => a - b);
+}
+
+function nextFixed(today: string, frequency: "weekly" | "biweekly" | "monthly", anchor: string): string {
   if (frequency === "monthly") return adjacentMonth(today, anchor, "next");
   const step = stepFor(frequency);
   const diff = diffDays(anchor, today);
@@ -107,12 +119,44 @@ export function nextPayday(today: string, frequency: PaydayFrequency, anchor: st
   return addDays(anchor, (Math.floor(diff / step) + 1) * step);
 }
 
-export function previousPayday(today: string, frequency: PaydayFrequency, anchor: string): string {
+function previousFixed(today: string, frequency: "weekly" | "biweekly" | "monthly", anchor: string): string {
   if (frequency === "monthly") return adjacentMonth(today, anchor, "previous");
   const step = stepFor(frequency);
   const diff = diffDays(anchor, today);
   if (diff < 0) return addDays(anchor, -step);
   return addDays(anchor, Math.floor(diff / step) * step);
+}
+
+function monthDayDates(today: string, days: number[]): string[] {
+  const [year, month] = today.split("-").map(Number);
+  const found: string[] = [];
+  for (let offset = -1; offset <= 2; offset += 1) {
+    for (const day of days) found.push(businessDay(clampDay(year, month - 1 + offset, day)));
+  }
+  return [...new Set(found)].sort();
+}
+
+export function nextPayday(today: string, frequency: PaydayFrequency, anchor: string, days: number[] = []): string {
+  if (frequency === "days") return monthDayDates(today, days).find((iso) => iso > today) ?? addDays(today, 1);
+  const nominal = nextFixed(today, frequency, anchor);
+  const paid = businessDay(nominal);
+  if (paid > today) return paid;
+  return businessDay(nextFixed(addDays(nominal, 1), frequency, anchor));
+}
+
+export function previousPayday(today: string, frequency: PaydayFrequency, anchor: string, days: number[] = []): string {
+  if (frequency === "days") {
+    const dates = monthDayDates(today, days).filter((iso) => iso <= today);
+    return dates.at(-1) ?? today;
+  }
+  const landed = [businessDay(previousFixed(today, frequency, anchor)), businessDay(nextFixed(today, frequency, anchor))];
+  const past = landed.filter((iso) => iso <= today).sort();
+  if (past.length > 0) return past.at(-1) ?? today;
+  return businessDay(previousFixed(today, frequency, anchor));
+}
+
+export function observedDueDates(dueDay: number, today: string, next: string): string[] {
+  return [...new Set(dueDatesInWindow(dueDay, today, next).map(businessDay))].filter((iso) => iso >= today && iso < next);
 }
 
 function adjacentMonth(today: string, anchor: string, which: "next" | "previous"): string {

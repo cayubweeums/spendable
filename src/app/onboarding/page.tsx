@@ -43,7 +43,7 @@ export default async function OnboardingPage({
 
   return (
     <div className="wizard">
-      <ReadFlash notice={query.notice} />
+      <ReadFlash notice={query.notice} warnings={status.errors} stamp={status.syncedAt} />
       <p className="kicker">Step {stepIndex + 1} of {steps.length}</p>
       <ol className="steps">
         {steps.map((item, index) => {
@@ -77,11 +77,15 @@ export default async function OnboardingPage({
         ) : (
           <>
             <h1 className="question">Setup user</h1>
-            <p className="page-intro">Password for the admin account on this app. It encrypts the data on this server. The bank password stays at your bank.</p>
+            <p className="page-intro">Choose a name and a password. The password encrypts the data on this server.</p>
             <form action={openApp}>
               <label>
+                Name
+                <input name="name" autoComplete="username" required maxLength={40} autoFocus />
+              </label>
+              <label>
                 Password
-                <input name="password" type="password" autoComplete="new-password" required minLength={8} maxLength={128} autoFocus />
+                <input name="password" type="password" autoComplete="new-password" required minLength={8} maxLength={128} />
               </label>
               <label>
                 Confirm password
@@ -146,13 +150,6 @@ export default async function OnboardingPage({
             Check the ones to keep and set the type. Only checking is spendable. This does not write back to the bank.
             {status.syncedAt ? ` Last copy ${status.syncedAt}.` : ""}
           </p>
-          {status.errors.length > 0 ? (
-            <ul className="errors">
-              {status.errors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </ul>
-          ) : null}
           {accounts.length === 0 ? (
             <div className="stack">
               <p>SimpleFIN accepted the token and returned no accounts. Add a bank under Financial Institutions, then sync again.</p>

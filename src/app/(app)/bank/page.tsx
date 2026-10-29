@@ -1,5 +1,6 @@
 import { addUser, connectBank, disconnectBank, importBackup, importFile, loadSample, resetBank } from "../../actions";
 import { AccessToken } from "@/components/access-token";
+import { MenuSelect } from "@/components/menu-select";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
@@ -23,7 +24,7 @@ export default async function BankPage({
   }));
   return (
     <>
-      <ReadFlash notice={query.notice} />
+      <ReadFlash notice={query.notice} warnings={status.errors} stamp={status.syncedAt} />
       <h1 className="question">Bank</h1>
       <div className="page-intro stack">
         <p>SimpleFIN copies balances. Your bank password stays with them. A token works once.</p>
@@ -40,13 +41,6 @@ export default async function BankPage({
       ) : (
         <p>No bank is connected.</p>
       )}
-      {status.errors.length > 0 ? (
-        <ul className="errors">
-          {status.errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      ) : null}
       <form action={connectBank} className="section stack">
         <label>
           Setup token
@@ -78,13 +72,13 @@ export default async function BankPage({
         <h2>Import</h2>
         <label>
           Account
-          <select name="account" required defaultValue={accounts[0]?.id ?? ""}>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {accountTitle(account)}
-              </option>
-            ))}
-          </select>
+          <MenuSelect
+            name="account"
+            required
+            defaultValue={accounts[0]?.id ?? ""}
+            label="Account"
+            options={accounts.map((account) => [account.id, accountTitle(account)] as const)}
+          />
         </label>
         <label>
           File
@@ -93,18 +87,28 @@ export default async function BankPage({
         <div className="row">
           <label>
             Format
-            <select name="date" defaultValue="mdy">
-              <option value="mdy">Month day</option>
-              <option value="dmy">Day month</option>
-              <option value="ymd">Year first</option>
-            </select>
+            <MenuSelect
+              name="date"
+              defaultValue="mdy"
+              label="Format"
+              options={[
+                ["mdy", "Month day"],
+                ["dmy", "Day month"],
+                ["ymd", "Year first"],
+              ]}
+            />
           </label>
           <label>
             Sign
-            <select name="sign" defaultValue="as">
-              <option value="as">As written</option>
-              <option value="flip">Flip</option>
-            </select>
+            <MenuSelect
+              name="sign"
+              defaultValue="as"
+              label="Sign"
+              options={[
+                ["as", "As written"],
+                ["flip", "Flip"],
+              ]}
+            />
           </label>
         </div>
         <div className="row">

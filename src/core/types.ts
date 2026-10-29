@@ -62,6 +62,7 @@ export type Payee = {
 export type Settings = {
   paydayFrequency: PaydayFrequency;
   paydayAnchor: string;
+  paydayDays?: number[];
   bufferCents: number;
 };
 

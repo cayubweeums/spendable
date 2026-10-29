@@ -28,6 +28,7 @@ export function PATCH(request: Request) {
     updateSettings({
       paydayFrequency: typeof body.paydayFrequency === "string" ? body.paydayFrequency : undefined,
       paydayAnchor: typeof body.paydayAnchor === "string" ? body.paydayAnchor : undefined,
+      paydayDays: typeof body.paydayDays === "string" ? body.paydayDays : undefined,
       bufferCents: typeof body.bufferCents === "number" ? body.bufferCents : undefined,
     });
     return getSettings();

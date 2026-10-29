@@ -94,13 +94,14 @@ describe("what gets subtracted", () => {
 
   it("leaves a zero buffer off the receipt and shows a shortfall", () => {
     const open = answer({ bufferCents: 0 });
-    assert.equal(open.receipt.lines.some((line) => line.label === "Left untouched"), false);
+    assert.equal(open.receipt.lines.some((line) => line.label === "Buffer"), false);
     const short = answer({
       bufferCents: 15_000,
       accounts: [account({ id: "checking", role: "spend", availableCents: 10_000, balanceCents: 10_000 })],
     });
     assert.equal(short.spendableCents, -5_000);
     assert.equal(short.perDayCents, -500);
+    assert.equal(short.receipt.lines.some((line) => line.label === "Buffer" && line.detail === ""), true);
   });
 
   it("uses an available balance of zero instead of the ledger", () => {

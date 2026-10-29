@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { formatLong } from "@/core/dates";
 import { formatMoney } from "@/core/money";
 import { amountsHidden, getReport, getSettings } from "@/core/service";
@@ -27,6 +28,7 @@ export default function ReportsPage() {
             <thead>
               <tr>
                 <th>Day</th>
+                <th>Payee</th>
                 <th className="num">In</th>
                 <th className="num">Out</th>
               </tr>
@@ -34,15 +36,31 @@ export default function ReportsPage() {
             <tbody>
               {report.days.length === 0 ? (
                 <tr>
-                  <td colSpan={3}>None</td>
+                  <td colSpan={4}>None</td>
                 </tr>
               ) : (
                 report.days.map((day) => (
-                  <tr key={day.date}>
-                    <td>{formatLong(day.date, settings.date)}</td>
-                    <td className="num">{money(day.incomeCents)}</td>
-                    <td className={day.expenseCents > 0 ? "num out" : "num"}>{money(day.expenseCents)}</td>
-                  </tr>
+                  <Fragment key={day.date}>
+                    <tr>
+                      <td>{formatLong(day.date, settings.date)}</td>
+                      <td></td>
+                      <td className="num">{money(day.incomeCents)}</td>
+                      <td className={day.expenseCents > 0 ? "num out" : "num"}>{money(day.expenseCents)}</td>
+                    </tr>
+                    {day.charges.map((charge, index) => (
+                      <tr key={`${day.date}-${index}`}>
+                        <td></td>
+                        <td>
+                          {charge.payee}
+                          {charge.category ? <span className="quiet-note"> · {charge.category}</span> : null}
+                        </td>
+                        <td className="num">{charge.amountCents > 0 ? money(charge.amountCents) : ""}</td>
+                        <td className={charge.amountCents < 0 ? "num out" : "num"}>
+                          {charge.amountCents < 0 ? money(-charge.amountCents) : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))
               )}
             </tbody>
