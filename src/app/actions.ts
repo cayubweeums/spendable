@@ -8,6 +8,7 @@ import { SpendableError, publicErrorMessage } from "@/core/errors";
 import {
   completeOnboarding,
   connect,
+  chargesReturn,
   connectionStatus,
   copyCharges,
   createBill,
@@ -444,6 +445,7 @@ export async function batchCharges(formData: FormData) {
 
 export async function saveTransaction(formData: FormData) {
   await requirePage();
+  const back = chargesReturn(String(formData.get("back") ?? ""));
   try {
     const categoryRaw = String(formData.get("category") ?? "");
     const wantsSplit = categoryRaw === "__split";
@@ -461,10 +463,10 @@ export async function saveTransaction(formData: FormData) {
       splits: wantsSplit ? amounts.map((amount, index) => ({ amount, category: categories[index] ?? "" })) : [],
     });
   } catch (error) {
-    await bail("/", error);
+    await bail(back, error);
   }
   refresh();
-  redirect("/?notice=saved");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}notice=saved`);
 }
 
 export async function addFilter(formData: FormData) {
@@ -521,15 +523,16 @@ export async function forgetFilter(formData: FormData) {
   redirect("/");
 }
 
-export async function undoTransaction() {
+export async function undoTransaction(formData: FormData) {
   await requirePage();
+  const back = chargesReturn(String(formData.get("back") ?? ""));
   try {
     undoEdit();
   } catch (error) {
-    await bail("/", error);
+    await bail(back, error);
   }
   refresh();
-  redirect("/?notice=undone");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}notice=undone`);
 }
 
 export async function addBill(formData: FormData) {
