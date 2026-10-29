@@ -8,6 +8,24 @@ export function commitSubjectOk(subject) {
   return subject.length <= 100 && subject === subject.trim() && header.test(subject);
 }
 
+const imageTypes = new Set(["feat", "fix", "perf", "refactor", "revert", "style", "build"]);
+const typeOf = new RegExp(`^(${types})(?:\\([a-z0-9._/-]+\\))?!?: `);
+
+/** @param {string} subject */
+export function commitType(subject) {
+  return typeOf.exec(subject)?.[1] ?? "";
+}
+
+// shortcut: the commit type decides, not the paths. Upgrade when a docs commit can change the image.
+/** @param {string[]} subjects */
+export function imageBuildNeeded(subjects) {
+  if (subjects.length === 0) return true;
+  return subjects.some((subject) => {
+    const type = commitType(subject);
+    return type === "" || imageTypes.has(type);
+  });
+}
+
 function fail(lines) {
   console.error("Use a semantic commit: type: subject");
   console.error("Types: feat, fix, perf, revert, docs, style, refactor, test, build, ci, chore.");
