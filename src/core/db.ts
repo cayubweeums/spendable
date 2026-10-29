@@ -5,7 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import { inferKind, isAccountKind, kindFromRole, roleForKind } from "./bank";
 import { buildDemo } from "./demo";
 import { SpendableError } from "./errors";
-import { isISODate, isoToLocalNoonUnix, postedToISO, type PaydayFrequency } from "./dates";
+import { actionableBankError } from "./simplefin";
+import { isISODate, isoToLocalNoonUnix, parsePaydayDays, postedToISO, type PaydayFrequency } from "./dates";
 import { decimalToCents } from "./money";
 import { categoryFor, clearedFlag, fillRuleValue, matchingRule, ruleMatches, ruleSource, type CategoryRule, type MatchRule, type RuleStage } from "./rules";
 import { sanitizeLabel } from "./sanitize";
@@ -468,6 +469,44 @@ function ensureColumns(database: DatabaseSync): void {
     }
     database
       .prepare("INSERT INTO meta (key, value) VALUES ('kinds_named', '1') ON CONFLICT(key) DO UPDATE SET value = '1'")
+      .run();
+  }
+  // shortcut: once per file. A deleted starter stays deleted. Upgrade when a new file should open with no categories.
+  const starters = database.prepare("SELECT value FROM meta WHERE key = ?").get("default_categories") as { value: string } | undefined;
+  if (!starters) {
+    const insert = database.prepare(
+      `INSERT INTO categories (name, group_name) VALUES (?, ?)
+       ON CONFLICT(name) DO UPDATE SET group_name = excluded.group_name WHERE group_name = ''`,
+    );
+    for (const [name, group] of [
+      ["Income", "Income"],
+      ["Food", "Usual Expenses"],
+      ["General", "Usual Expenses"],
+      ["Bills", "Usual Expenses"],
+      ["Bills (Flexible)", "Usual Expenses"],
+      ["Savings", "Investments and Savings"],
+    ]) {
+      insert.run(name, group);
+    }
+    database
+      .prepare("INSERT INTO meta (key, value) VALUES ('default_categories', '1') ON CONFLICT(key) DO UPDATE SET value = '1'")
+      .run();
+  }
+  // shortcut: one unused starter. Upgrade when another seeded name should leave files that already opened.
+  const dropped = database.prepare("SELECT value FROM meta WHERE key = ?").get("drop_starting_balances") as { value: string } | undefined;
+  if (!dropped) {
+    database
+      .prepare(
+        `DELETE FROM categories WHERE name = 'Starting Balances'
+         AND NOT EXISTS (SELECT 1 FROM transactions WHERE category = 'Starting Balances')
+         AND NOT EXISTS (SELECT 1 FROM splits WHERE category = 'Starting Balances')
+         AND NOT EXISTS (SELECT 1 FROM rules WHERE category = 'Starting Balances')
+         AND NOT EXISTS (SELECT 1 FROM payees WHERE category = 'Starting Balances')
+         AND NOT EXISTS (SELECT 1 FROM match_rules WHERE action = 'category' AND action_value = 'Starting Balances')`,
+      )
+      .run();
+    database
+      .prepare("INSERT INTO meta (key, value) VALUES ('drop_starting_balances', '1') ON CONFLICT(key) DO UPDATE SET value = '1'")
       .run();
   }
 }
@@ -1357,7 +1396,9 @@ export function getConnection(): { accessUrl: string; claimedAt: string; lastSyn
   let errors: string[] = [];
   try {
     const parsed = JSON.parse(row.last_errors) as unknown;
-    if (Array.isArray(parsed)) errors = parsed.filter((item): item is string => typeof item === "string");
+    if (Array.isArray(parsed)) {
+      errors = parsed.filter((item): item is string => typeof item === "string" && actionableBankError(item));
+    }
   } catch {
     errors = [];
   }
@@ -1406,10 +1447,11 @@ export function wipeFinancialRows(): void {
 export function readSettings(): Settings {
   const frequency = getMeta("payday_frequency", "biweekly");
   const paydayFrequency: PaydayFrequency =
-    frequency === "weekly" || frequency === "monthly" || frequency === "biweekly" ? frequency : "biweekly";
+    frequency === "weekly" || frequency === "monthly" || frequency === "biweekly" || frequency === "days" ? frequency : "biweekly";
   return {
     paydayFrequency,
     paydayAnchor: getMeta("payday_anchor"),
+    paydayDays: parsePaydayDays(getMeta("payday_days", "")),
     bufferCents: Number(getMeta("buffer_cents", "0")) || 0,
   };
 }
@@ -1417,6 +1459,7 @@ export function readSettings(): Settings {
 export function writeSettings(settings: Settings): void {
   setMeta("payday_frequency", settings.paydayFrequency);
   setMeta("payday_anchor", settings.paydayAnchor);
+  setMeta("payday_days", (settings.paydayDays ?? []).join(","));
   setMeta("buffer_cents", String(settings.bufferCents));
 }
 

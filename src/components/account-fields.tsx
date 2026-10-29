@@ -25,13 +25,10 @@ export function AccountFields({ account }: { account: Account }) {
         Note
         <input name={`note:${account.id}`} defaultValue={account.note ?? ""} maxLength={280} />
       </label>
-      <label className="check">
-        <input type="checkbox" name={`track:${account.id}`} value="1" defaultChecked={account.tracked !== false} />
-        Follow this account
-      </label>
       <KindFields
         id={account.id}
         kind={kind}
+        tracked={account.tracked !== false}
         dueDay={account.dueDay}
         payMode={account.payMode}
         minimumCents={account.minimumCents}

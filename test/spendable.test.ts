@@ -22,10 +22,10 @@ test("payday stays on the calendar, including short months", () => {
   assert.equal(previousPayday("2026-10-27", "biweekly", "2026-10-23"), "2026-10-23");
   assert.equal(nextPayday("2026-10-23", "biweekly", "2026-10-23"), "2026-11-06");
   assert.equal(previousPayday("2026-10-23", "biweekly", "2026-10-23"), "2026-10-23");
-  assert.equal(nextPayday("2026-02-15", "monthly", "2026-01-31"), "2026-02-28");
-  assert.equal(previousPayday("2026-02-15", "monthly", "2026-01-31"), "2026-01-31");
+  assert.equal(nextPayday("2026-02-15", "monthly", "2026-01-31"), "2026-02-27");
+  assert.equal(previousPayday("2026-02-15", "monthly", "2026-01-31"), "2026-01-30");
   assert.equal(nextPayday("2026-03-01", "monthly", "2026-01-31"), "2026-03-31");
-  assert.equal(previousPayday("2026-03-01", "monthly", "2026-01-31"), "2026-02-28");
+  assert.equal(previousPayday("2026-03-01", "monthly", "2026-01-31"), "2026-02-27");
   assert.equal(previousPayday("2026-01-10", "monthly", "2025-01-31"), "2025-12-31");
   assert.deepEqual(dueDatesInWindow(30, "2026-10-27", "2026-11-06"), ["2026-10-30"]);
   assert.deepEqual(dueDatesInWindow(6, "2026-10-27", "2026-11-06"), []);

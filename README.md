@@ -24,7 +24,7 @@ volumes:
 docker compose up -d
 ```
 
-Open http://127.0.0.1:3000.
+Open http://127.0.0.1:3000, set a name and password, and sign in with those.
 
 ## MCP
 

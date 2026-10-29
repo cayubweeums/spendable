@@ -1,4 +1,5 @@
 import { addBill, addPlan, deleteBill, removePlan } from "../../actions";
+import { MenuSelect } from "@/components/menu-select";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
@@ -30,7 +31,6 @@ export default async function BillsPage({
   const day = (iso: string) => formatLong(iso, settings.date);
   const days = eachDate(snapshot.today, snapshot.nextPayday);
   const held = snapshot.receipt.lines.filter((line) => line.when);
-  const buffer = snapshot.receipt.lines.find((line) => line.kind === "sub" && !line.when);
 
   return (
     <>
@@ -73,10 +73,6 @@ export default async function BillsPage({
           );
         })}
       </ol>
-      <p className="runway-under">
-        <span>{buffer ? `Buffer ${money(buffer.cents)} held the whole way` : "No buffer held"}</span>
-        <span>Bank balances unchanged</span>
-      </p>
 
       <section className="section">
         <h2>Every bill</h2>
@@ -164,13 +160,7 @@ export default async function BillsPage({
           </label>
           <label>
             Kind
-            <select name="kind" defaultValue="income">
-              {PLAN_KINDS.map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <MenuSelect name="kind" defaultValue="income" label="Kind" options={PLAN_KINDS} />
           </label>
           <label>
             Match

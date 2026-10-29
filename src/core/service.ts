@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { accountTitle, inferKind, isAccountKind, kindFromRole, mergeBankAccount, roleForKind } from "./bank";
-import { diffDays, isISODate, isoToLocalNoonUnix, localISODate, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
+import { diffDays, isISODate, isoToLocalNoonUnix, localISODate, parsePaydayDays, postedToISO, type DateFormat, type PaydayFrequency } from "./dates";
 import * as store from "./db";
 import { SpendableError, scrubSecrets } from "./errors";
 import { parseImport } from "./import";
@@ -40,7 +40,7 @@ export const sessionCookie = {
 
 const ROLES: Role[] = ["spend", "reserve", "credit", "ignore"];
 const PAY_MODES: PayMode[] = ["full", "minimum", "none"];
-const FREQUENCIES: PaydayFrequency[] = ["weekly", "biweekly", "monthly"];
+const FREQUENCIES: PaydayFrequency[] = ["weekly", "biweekly", "monthly", "days"];
 
 export function closeDb(): void {
   store.closeDb();
@@ -61,37 +61,51 @@ export function passwordIsSet(): boolean {
   return store.getMeta("password_hash") !== "";
 }
 
-export function establishPassword(password: string, confirm: string): string {
+export function establishPassword(password: string, confirm: string, name = ""): string {
   assertPassword(password);
   if (password !== confirm) throw new SpendableError("Those passwords do not match.", "password_mismatch");
   if (store.isSealed()) throw new SpendableError("A password is already set.", "password_set");
+  const cleaned = sanitizeLabel(name, 40);
   store.withTransaction(() => {
     if (store.getMeta("password_hash")) throw new SpendableError("A password is already set.", "password_set");
     store.setMeta("password_hash", hashPassword(password));
+    if (cleaned) store.setMeta("user_name", cleaned);
   });
   store.seal(password);
   return startSession();
 }
 
+function ownerName(): string {
+  return store.isAdminFile() && store.isUnlocked() ? sanitizeLabel(store.getMeta("user_name"), 40) : "";
+}
+
 // shortcut: wrong passwords are not rate limited, add a delay if this port is reachable beyond the host
+// shortcut: the admin name is inside the sealed file, so a wrong name still tries that password. A name stored beside the file waits.
 export function signIn(password: string, name = ""): string {
   const cleaned = sanitizeLabel(name, 40);
-  if (cleaned) {
-    const file = store.userFile(cleaned);
-    if (!store.fileExists(file)) throw new SpendableError("That password is wrong.", "bad_password", 401);
-    store.useFile(file);
-  } else if (!store.isAdminFile()) store.useFile(store.adminFile());
+  const namedFile = cleaned ? store.userFile(cleaned) : "";
+  if (namedFile && store.fileExists(namedFile)) store.useFile(namedFile);
+  else if (!store.isAdminFile()) store.useFile(store.adminFile());
+  let opened = false;
   if (store.isSealed()) {
-    if (!store.isUnlocked()) store.unlock(password);
-    else if (!passwordMatches(password, store.getMeta("password_hash"))) {
+    if (!store.isUnlocked()) {
+      store.unlock(password);
+      opened = true;
+    } else if (!passwordMatches(password, store.getMeta("password_hash"))) {
       throw new SpendableError("That password is wrong.", "bad_password", 401);
     }
-    return startSession();
+  } else {
+    const stored = store.getMeta("password_hash");
+    if (!stored) throw new SpendableError("Choose a password first.", "no_password");
+    if (!passwordMatches(password, stored)) throw new SpendableError("That password is wrong.", "bad_password", 401);
+    store.seal(password);
   }
-  const stored = store.getMeta("password_hash");
-  if (!stored) throw new SpendableError("Choose a password first.", "no_password");
-  if (!passwordMatches(password, stored)) throw new SpendableError("That password is wrong.", "bad_password", 401);
-  store.seal(password);
+  const owner = ownerName();
+  const nameOk = namedFile && store.fileExists(namedFile) ? true : owner ? owner.toLowerCase() === cleaned.toLowerCase() : cleaned === "";
+  if (!nameOk) {
+    if (opened) store.lock();
+    throw new SpendableError("That password is wrong.", "bad_password", 401);
+  }
   return startSession();
 }
 
@@ -111,6 +125,8 @@ function createNamedUser(name: string, password: string): void {
   assertPassword(password);
   const cleaned = sanitizeLabel(name, 40);
   if (!cleaned) throw new SpendableError("A user needs a name.", "bad_user");
+  const owner = ownerName();
+  if (owner && owner.toLowerCase() === cleaned.toLowerCase()) throw new SpendableError("That name is taken.", "bad_user");
   store.sealFresh(store.userFile(cleaned), password, {
     initialized: "1",
     must_change: "1",
@@ -223,11 +239,12 @@ export function getReport() {
       .filter((account) => account.role === "spend" && account.currency === snapshot.currency)
       .map((account) => account.id),
   );
-  return {
-    ...monthReport(store.listTransactions(), spendIds, snapshot.today, snapshot.depositsCents - snapshot.owedCents),
-    currency: snapshot.currency,
-    today: snapshot.today,
-  };
+  const names = store.payeeNamesByDescription();
+  const report = monthReport(store.listTransactions(), spendIds, snapshot.today, snapshot.depositsCents - snapshot.owedCents);
+  for (const day of report.days) {
+    for (const charge of day.charges) charge.payee = names.get(charge.payee) || charge.payee;
+  }
+  return { ...report, currency: snapshot.currency, today: snapshot.today };
 }
 
 export function getSnapshot(): Snapshot {
@@ -746,9 +763,8 @@ export function setLearnRules(on: boolean): void {
   store.setMeta("learn_rules", on ? "1" : "0");
 }
 
-// shortcut: one exact rule, appended. A rename does not add one. Clearing the category leaves the rule.
-function learnMatch(field: "imported_payee" | "payee", value: string, category: string): void {
-  if (store.getMeta("learn_rules", "1") === "0") return;
+// shortcut: one exact "is" rule, appended. A rename does not add one. Clearing the category leaves the rule.
+function writeCategoryRule(field: "imported_payee" | "payee", value: string, category: string): void {
   const cleaned = sanitizeLabel(value, 180);
   if (!cleaned) return;
   const rules = store.listMatchRules();
@@ -781,6 +797,27 @@ function learnMatch(field: "imported_payee" | "payee", value: string, category: 
     store.replaceMatchRules(next);
   }
   store.applyMatchRules("after");
+}
+
+function learnMatch(field: "imported_payee" | "payee", value: string, category: string): void {
+  if (store.getMeta("learn_rules", "1") === "0") return;
+  writeCategoryRule(field, value, category);
+}
+
+export function rulePayee(name: string, category: string): void {
+  ready();
+  const current = store.getPayee(name);
+  if (!current) throw new SpendableError("No payee with that name.", "not_found", 404);
+  const cleaned = sanitizeLabel(category, 40);
+  if (!cleaned) throw new SpendableError("A category needs a name.", "bad_category");
+  store.withTransaction(() => {
+    store.insertCategory(cleaned);
+    if (store.writePayee(name, { favorite: current.favorite, category: cleaned }) === 0) {
+      throw new SpendableError("No payee with that name.", "not_found", 404);
+    }
+    store.fillPayeeCategory(name);
+    writeCategoryRule("payee", name, cleaned);
+  });
 }
 
 export function saveRules(input: RuleInput[]): MatchRule[] {
@@ -897,9 +934,11 @@ export function saveTransactionDetails(input: {
   ready();
   const txn = store.getTransaction(input.id);
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  const wantsSplit = input.category === "__split";
   const parts = input.splits == null ? null : normalizeSplits(txn.amountCents, input.splits);
   const splitting = parts != null && parts.length > 0;
-  const category = splitting || input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
+  if (wantsSplit && !splitting) throw new SpendableError("A split needs two parts.", "bad_split");
+  const category = wantsSplit || splitting || input.category == null || input.category.trim() === "" ? null : sanitizeLabel(input.category, 40);
   const tags = input.tags == null ? null : parseTags(input.tags);
   const contains = normalizeContains(input.contains || txn.description);
   if (!splitting && input.remember && !category) {
@@ -1301,19 +1340,29 @@ function parseTags(input: string): string[] {
   return tags;
 }
 
-export function updateSettings(patch: { paydayFrequency?: string; paydayAnchor?: string; bufferCents?: number }): Settings {
+export function updateSettings(patch: {
+  paydayFrequency?: string;
+  paydayAnchor?: string;
+  paydayDays?: string;
+  bufferCents?: number;
+}): Settings {
   ready();
   const current = store.readSettings();
   const paydayFrequency = patch.paydayFrequency == null ? current.paydayFrequency : patch.paydayFrequency;
   if (!FREQUENCIES.includes(paydayFrequency as PaydayFrequency)) {
-    throw new SpendableError("Payday can be weekly, biweekly, or monthly.", "bad_payday");
+    throw new SpendableError("Payday can be weekly, biweekly, monthly, or days of the month.", "bad_payday");
   }
   const paydayAnchor = patch.paydayAnchor ?? current.paydayAnchor;
   if (!isISODate(paydayAnchor)) throw new SpendableError("Payday anchor should be YYYY-MM-DD.", "bad_date");
+  const paydayDays = patch.paydayDays == null ? (current.paydayDays ?? []) : parsePaydayDays(patch.paydayDays);
+  if (paydayFrequency === "days" && paydayDays.length === 0) {
+    throw new SpendableError("Name the days, like 15 and 25.", "bad_payday");
+  }
   const bufferCents = patch.bufferCents == null ? current.bufferCents : assertCents(patch.bufferCents, "Buffer", true);
   const settings: Settings = {
     paydayFrequency: paydayFrequency as PaydayFrequency,
     paydayAnchor,
+    paydayDays,
     bufferCents,
   };
   store.writeSettings(settings);

@@ -103,6 +103,23 @@ test("saving a category or a payee category learns one rule until Learn is off",
     service.setLearnRules(false);
     service.updatePayee("Market Basket", { category: "Health" });
     assert.equal(service.listMatchRules().find((rule) => rule.field === "payee")?.actionValue, "Eating out");
+
+    store.insertTransaction({
+      id: "open-fuel",
+      accountId: coffee.accountId,
+      posted: coffee.posted,
+      amountCents: -100,
+      description: "North Fuel",
+      pending: false,
+      category: null,
+    });
+    service.rulePayee("North Fuel", "Gas");
+    const fuelRule = service.listMatchRules().find((rule) => rule.field === "payee" && rule.value === "North Fuel");
+    assert.equal(fuelRule?.op, "is");
+    assert.equal(fuelRule?.action, "category");
+    assert.equal(fuelRule?.actionValue, "Gas");
+    assert.equal(store.getTransaction("open-fuel")?.category, "Gas");
+    assert.equal(store.getTransaction("demo_txn_fuel")?.category, "Gas");
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
   } finally {
     service.closeDb();

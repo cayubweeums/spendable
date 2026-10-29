@@ -17,7 +17,15 @@ function cleanQuery(value: string | undefined): string | null {
   return cleaned || null;
 }
 
-export async function ReadFlash({ notice }: { notice?: string }) {
+export async function ReadFlash({
+  notice,
+  warnings = [],
+  stamp = null,
+}: {
+  notice?: string;
+  warnings?: string[];
+  stamp?: string | null;
+}) {
   const jar = await cookies();
   const raw = jar.get("spendable_flash")?.value;
   let error: string | undefined;
@@ -30,6 +38,6 @@ export async function ReadFlash({ notice }: { notice?: string }) {
     }
   }
   const noticeText = !error && notice ? notices[notice] : undefined;
-  if (!error && !noticeText) return null;
-  return <FlashBanner error={error} notice={noticeText} />;
+  if (!error && !noticeText && warnings.length === 0) return null;
+  return <FlashBanner error={error} notice={noticeText} warnings={warnings} stamp={stamp} />;
 }

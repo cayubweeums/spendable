@@ -66,6 +66,9 @@ test("a report totals this month and leaves the balances", async () => {
     assert.equal(after.summaryCents, before.summaryCents + 3_000);
     assert.equal(day?.incomeCents, (prior?.incomeCents ?? 0) + 8_000);
     assert.equal(day?.expenseCents, (prior?.expenseCents ?? 0) + 5_000);
+    assert.equal(day?.charges.some((charge) => charge.payee === "Pay" && charge.amountCents === 8_000), true);
+    assert.equal(day?.charges.some((charge) => charge.payee === "Shop" && charge.amountCents === -5_000), true);
+    assert.equal(day?.charges.some((charge) => charge.payee === "Card" || charge.payee === "Wait"), false);
     assert.equal(after.netWorthCents, snapshot.depositsCents - snapshot.owedCents);
     assert.equal(service.getSnapshot().spendableCents, snapshot.spendableCents);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);

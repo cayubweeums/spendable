@@ -1,4 +1,5 @@
 import { savePayees } from "../../actions";
+import { MenuSelect } from "@/components/menu-select";
 import { ReadFlash } from "@/components/read-flash";
 import { SubmitButton } from "@/components/submit-button";
 import { listCategories, listPayees } from "@/core/service";
@@ -43,6 +44,7 @@ export default async function PayeesPage({
                     <option value=""></option>
                     {categories.map((category) => (
                       <option key={category.name} value={category.name}>
+                    creatable
                         {category.name}
                       </option>
                     ))}

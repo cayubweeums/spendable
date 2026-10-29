@@ -1,4 +1,6 @@
 import { addFilter, batchCharges, dropFilter, forgetFilter, keepFilter, saveSettings, saveTransaction, undoTransaction } from "../actions";
+import { ChargeCategory } from "@/components/charge-category";
+import { MenuSelect } from "@/components/menu-select";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
 import { PaceChart, paceCaption } from "@/components/pace-chart";
@@ -26,11 +28,6 @@ import {
   type ChargeFilter,
 } from "@/core/service";
 
-function monthLine(today: string, gapCents: number, money: (cents: number) => string): string {
-  const name = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(new Date(`${today}T00:00:00Z`));
-  return gapCents >= 0 ? `${name} is under ${money(gapCents)}` : `${name} is over ${money(-gapCents)}`;
-}
-
 export default async function HomePage({
   searchParams,
 }: {
@@ -49,9 +46,7 @@ export default async function HomePage({
   const settings = getSettings();
   const rules = listRules();
   const bills = listBills();
-  const categoryNames = listCategories()
-    .filter((category) => !category.hidden)
-    .map((category) => category.name);
+  const categories = listCategories().filter((category) => !category.hidden);
   const payeeName = new Map(listPayees().flatMap((payee) => payee.descriptions.map((description) => [description, payee.name] as const)));
   const accountById = new Map(listAccounts().map((account) => [account.id, account]));
   const charges = conditions.length
@@ -84,20 +79,12 @@ export default async function HomePage({
 
   return (
     <>
-      <ReadFlash notice={query.notice} />
+      <ReadFlash notice={query.notice} warnings={snapshot.syncErrors} stamp={snapshot.syncedAt} />
       {snapshot.demo ? (
         <p className="banner">
           Sample numbers, so you can see the shape of the answer. <a href="/bank">Connect a bank</a> when you want yours.
         </p>
       ) : null}
-      {snapshot.syncErrors.length > 0 ? (
-        <ul className="errors">
-          {snapshot.syncErrors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      ) : null}
-
       <div className="layout">
         <section className="sum">
           <h1 className="question">{snapshot.question}</h1>
@@ -111,7 +98,7 @@ export default async function HomePage({
                 <li key={`${line.kind}-${line.label}-${index}`} className={line.kind === "sub" ? "sub" : undefined}>
                   <span className="label">
                     {line.label}
-                    <small>{line.detail}</small>
+                    {line.detail ? <small>{line.detail}</small> : null}
                   </span>
                   <span className="amount">{money(line.cents)}</span>
                 </li>
@@ -127,13 +114,13 @@ export default async function HomePage({
               ? `Short ${money(-snapshot.spendableCents)} before ${day(snapshot.nextPayday)}.`
               : `${money(snapshot.perDayCents)} a day until ${day(snapshot.nextPayday)}.`}
           </p>
-          <p className="allowance">{monthLine(snapshot.today, snapshot.monthGapCents, money)}</p>
-          <p className="principle">Balances are copied from the bank. Nothing here changes them.</p>
         </section>
 
         <div className="lists">
           <section>
-            <h2 className="kicker">Accounts</h2>
+            <h2 className="kicker">
+              <a href="/accounts">Accounts</a>
+            </h2>
             <ul className="rows">
               {snapshot.deposits.map((account) => (
                 <li key={account.id}>
@@ -160,15 +147,40 @@ export default async function HomePage({
               ))}
             </ul>
             <p className="totals">
-              <span>On deposit <strong>{money(snapshot.depositsCents)}</strong></span>
               <span>Owed on cards <strong>{money(snapshot.owedCents)}</strong></span>
               <span>{asOf ? `As of ${formatTimestamp(asOf, settings.date)}` : null}</span>
             </p>
           </section>
 
           <section>
+            <h2 className="kicker">
+              <a href="/bills">Bills</a>
+            </h2>
+            {bills.some((bill) => bill.active) ? (
+              <ul className="rows">
+                {bills
+                  .filter((bill) => bill.active)
+                  .map((bill) => (
+                    <li key={bill.id}>
+                      <span>{bill.name}</span>
+                      <span className="quiet-note">{ordinal(bill.dueDay)}</span>
+                      <span className="num">{money(bill.amountCents)}</span>
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="principle">
+                <a href="/bills">None found, set them up to see them here.</a>
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+
+      <section className="section charges">
             <div className="charge-head">
               <h2 className="kicker">Charges</h2>
+              <a href="/charges">All</a>
               <a href="/api/v1/transactions?format=csv">CSV</a>
               {canUndo() ? (
                 <form action={undoTransaction}>
@@ -197,30 +209,18 @@ export default async function HomePage({
                 ))}
               </div>
             ) : null}
-            <form action={addFilter} className="row">
+            <form action={addFilter} className="filter-row">
               {named ? <input type="hidden" name="name" value={named} /> : null}
               {conditions.map((filter, index) => (
                 <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
               ))}
               <label>
                 Field
-                <select name="field" defaultValue="category">
-                  {FILTER_FIELDS.map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <MenuSelect name="field" defaultValue="category" label="Field" options={FILTER_FIELDS} />
               </label>
               <label>
                 Op
-                <select name="op" defaultValue="is">
-                  {RULE_OPS.map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <MenuSelect name="op" defaultValue="is" label="Op" options={RULE_OPS} />
               </label>
               <label>
                 Value
@@ -229,7 +229,7 @@ export default async function HomePage({
               <SubmitButton pending="Adding…">Add</SubmitButton>
             </form>
             {conditions.length > 0 ? (
-              <form action={keepFilter} className="row">
+              <form action={keepFilter} className="filter-row">
                 {conditions.map((filter, index) => (
                   <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
                 ))}
@@ -259,15 +259,12 @@ export default async function HomePage({
                 ))}
               </p>
             ) : null}
-            <form id="batch" action={batchCharges} className="row">
+            <form id="batch" action={batchCharges} className="filter-row">
               {named ? <input type="hidden" name="name" value={named} /> : null}
               {conditions.map((filter, index) => (
                 <input key={index} type="hidden" name="c" value={encodeFilter(filter)} />
               ))}
-              <label>
-                Category
-                <input name="category" list="categories" maxLength={40} />
-              </label>
+              <CategorySelect name="category" categories={categories} value="" label="Category" />
               <SubmitButton pending="Saving…">Apply</SubmitButton>
               <button className="quiet" name="intent" value="copy" type="submit">
                 Copy
@@ -276,11 +273,6 @@ export default async function HomePage({
                 Merge
               </button>
             </form>
-            <datalist id="categories">
-              {categoryNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
             <table className="ledger">
               <thead className="sr">
                 <tr>
@@ -320,41 +312,20 @@ export default async function HomePage({
                           {txn.cleared ? " · cleared" : null}
                           {bill ? " · monthly" : null}
                         </span>
-                        <details className="txn-more" suppressHydrationWarning>
-                          <summary>{rule || bill ? "Edit rule" : "Set category"}</summary>
-                          <form action={saveTransaction}>
-                            <input type="hidden" name="id" value={txn.id} />
-                            <label>
-                              Category
-                              <input name="category" list="categories" defaultValue={txn.category ?? ""} maxLength={40} />
-                            </label>
-                            {Array.from({ length: Math.max(txn.splits.length + (txn.splits.length >= 2 ? 1 : 0), 2) }, (_, index) => {
-                              const part = txn.splits[index];
-                              return (
-                                <div className="split" key={index}>
-                                  <label>
-                                    {index === 0 ? "Split" : ""}
-                                    <input
-                                      name="split-amount"
-                                      inputMode="decimal"
-                                      defaultValue={part ? (Math.abs(part.amountCents) / 100).toFixed(2) : ""}
-                                      maxLength={20}
-                                      aria-label={`Split ${index + 1} amount`}
-                                    />
-                                  </label>
-                                  <label>
-                                    {index === 0 ? "Category" : ""}
-                                    <input
-                                      name="split-category"
-                                      list="categories"
-                                      defaultValue={part?.category ?? ""}
-                                      maxLength={40}
-                                      aria-label={`Split ${index + 1} category`}
-                                    />
-                                  </label>
-                                </div>
-                              );
-                            })}
+                        <form action={saveTransaction} className="txn-edit">
+                          <input type="hidden" name="id" value={txn.id} />
+                          <ChargeCategory
+                            categories={categories}
+                            category={txn.category}
+                            splits={txn.splits}
+                            amountCents={txn.amountCents}
+                            currency={txn.currency}
+                            hidden={hidden}
+                            numberFormat={settings.number}
+                            hideCents={settings.hideCents}
+                          />
+                          <details className="txn-more" suppressHydrationWarning>
+                            <summary>More</summary>
                             <label>
                               Note
                               <input name="note" defaultValue={txn.note ?? ""} maxLength={280} />
@@ -382,8 +353,8 @@ export default async function HomePage({
                             ) : null}
                             <PendingNote>Saving this charge.</PendingNote>
                             <SubmitButton pending="Saving…">Save</SubmitButton>
-                          </form>
-                        </details>
+                          </details>
+                        </form>
                       </td>
                       <td className="hide-sm quiet-note">{txn.accountName}</td>
                       <td className={txn.amountCents < 0 ? "num out" : "num"}>{money(txn.amountCents, txn.currency)}</td>
@@ -392,33 +363,12 @@ export default async function HomePage({
                 })}
               </tbody>
             </table>
-            <p className="principle">A charge that already posted this pay period is not held twice.</p>
-          </section>
-
-          <section>
-            <h2 className="kicker">Bills</h2>
-            <ul className="rows">
-              {bills
-                .filter((bill) => bill.active)
-                .map((bill) => (
-                  <li key={bill.id}>
-                    <span>{bill.name}</span>
-                    <span className="quiet-note">{ordinal(bill.dueDay)}</span>
-                    <span className="num">{money(bill.amountCents)}</span>
-                  </li>
-                ))}
-            </ul>
-            <p className="principle">
-              <a href="/bills">See them by day</a>
-            </p>
-          </section>
-        </div>
-      </div>
+      </section>
 
       <section className="section">
         <p className="kicker">Since {day(snapshot.previousPayday)}</p>
         <h2>What already left</h2>
-        <p>{paceCaption(snapshot)} Unpaid bills stay in the sum above.</p>
+        <p>{paceCaption(snapshot)}</p>
         <PaceChart snapshot={snapshot} />
         <p className="legend">
           <span>
@@ -432,23 +382,32 @@ export default async function HomePage({
 
       <section className="section">
         <h2>Payday and buffer</h2>
-        <p className="page-intro">These pick which bills count. They do not change a balance.</p>
         <form action={saveSettings} className="stack">
           <div className="row">
             <label>
               How often you get paid
-              <select name="frequency" defaultValue={settings.paydayFrequency}>
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Every two weeks</option>
-                <option value="monthly">Monthly</option>
-              </select>
+              <MenuSelect
+                name="frequency"
+                defaultValue={settings.paydayFrequency}
+                label="How often you get paid"
+                options={[
+                  ["weekly", "Weekly"],
+                  ["biweekly", "Every two weeks"],
+                  ["monthly", "Monthly"],
+                  ["days", "Days of the month"],
+                ]}
+              />
             </label>
             <label>
               A payday you remember
               <input type="date" name="anchor" defaultValue={settings.paydayAnchor} required />
             </label>
             <label>
-              Buffer to leave untouched
+              Days
+              <input name="days" defaultValue={(settings.paydayDays ?? []).join(", ")} placeholder="15, 25" maxLength={40} />
+            </label>
+            <label>
+              Buffer
               <input name="buffer" inputMode="decimal" defaultValue={(settings.bufferCents / 100).toFixed(2)} />
             </label>
           </div>
@@ -456,25 +415,40 @@ export default async function HomePage({
           <div className="row">
             <label>
               Date
-              <select name="date" defaultValue={settings.date}>
-                <option value="mdy">Oct 28</option>
-                <option value="dmy">28 Oct</option>
-                <option value="ymd">2026-10-28</option>
-              </select>
+              <MenuSelect
+                name="date"
+                defaultValue={settings.date}
+                label="Date"
+                options={[
+                  ["mdy", "Oct 28"],
+                  ["dmy", "28 Oct"],
+                  ["ymd", "2026-10-28"],
+                ]}
+              />
             </label>
             <label>
               Number
-              <select name="number" defaultValue={settings.number}>
-                <option value="us">1,234.56</option>
-                <option value="eu">1.234,56</option>
-              </select>
+              <MenuSelect
+                name="number"
+                defaultValue={settings.number}
+                label="Number"
+                options={[
+                  ["us", "1,234.56"],
+                  ["eu", "1.234,56"],
+                ]}
+              />
             </label>
             <label>
               Week
-              <select name="week" defaultValue={String(settings.weekStart)}>
-                <option value="0">Sunday</option>
-                <option value="1">Monday</option>
-              </select>
+              <MenuSelect
+                name="week"
+                defaultValue={String(settings.weekStart)}
+                label="Week"
+                options={[
+                  ["0", "Sunday"],
+                  ["1", "Monday"],
+                ]}
+              />
             </label>
             <label className="check">
               <input type="checkbox" name="cents" value="1" defaultChecked={!settings.hideCents} />
@@ -486,5 +460,46 @@ export default async function HomePage({
         </form>
       </section>
     </>
+  );
+}
+
+function CategorySelect({
+  name,
+  categories,
+  value,
+  allowSplit,
+  label,
+}: {
+  name: string;
+  categories: { name: string; group: string }[];
+  value: string;
+  allowSplit?: boolean;
+  label: string;
+}) {
+  const choices = [...categories];
+  if (value && value !== "__split" && !choices.some((category) => category.name === value)) {
+    choices.unshift({ name: value, group: "" });
+  }
+  const groups: { group: string; names: string[] }[] = [];
+  for (const category of choices) {
+    const last = groups.at(-1);
+    if (last && last.group === category.group) last.names.push(category.name);
+    else groups.push({ group: category.group, names: [category.name] });
+  }
+  return (
+    <label>
+      {label}
+      <MenuSelect
+        name={name}
+        defaultValue={value}
+        label={label || "Category"}
+        options={[
+          { value: "", label: "" },
+          ...groups.flatMap((group) => group.names.map((item) => ({ value: item, label: item, group: group.group }))),
+          ...(allowSplit ? [{ value: "__split", label: "Split" }] : []),
+        ]}
+        creatable
+      />
+    </label>
   );
 }

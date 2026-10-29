@@ -20,7 +20,8 @@ test("a new user gets a separate file and must replace the temporary password", 
     service.ready();
     const balance = store.getAccount("demo_checking")?.balanceCents;
     const spendable = service.getSnapshot().spendableCents;
-    service.establishPassword("admin-pass-1", "admin-pass-1");
+    service.establishPassword("admin-pass-1", "admin-pass-1", "Owner");
+    assert.throws(() => service.addUser("Owner", "temporary1"), /taken/);
     service.addUser("Ada", "temporary1");
     assert.throws(() => service.registerUser("Bea", "temporary2"), (error: Error & { code?: string }) => error.code === "forbidden");
 
@@ -31,7 +32,8 @@ test("a new user gets a separate file and must replace the temporary password", 
     service.changePassword("permanent1", "permanent1");
     assert.equal(service.mustChangePassword(), false);
 
-    service.signIn("admin-pass-1");
+    assert.throws(() => service.signIn("admin-pass-1"), /wrong/);
+    service.signIn("admin-pass-1", "Owner");
     assert.equal(service.isAdmin(), true);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
     assert.equal(service.getSnapshot().spendableCents, spendable);
@@ -40,7 +42,7 @@ test("a new user gets a separate file and must replace the temporary password", 
     service.registerUser("Bea", "temporary2");
     assert.equal(service.mustChangePassword(), true);
     assert.equal(store.getAccount("demo_checking"), null);
-    service.signIn("admin-pass-1");
+    service.signIn("admin-pass-1", "Owner");
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
   } finally {
     delete process.env.SPENDABLE_SIGNUP;

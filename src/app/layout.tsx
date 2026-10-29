@@ -65,12 +65,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   Connect
                 </a>
               )}
-              <HideToggle hidden={amountsHidden()} />
               <form action={signOut} className="inline">
-                <SubmitButton pending="Signing out…" quiet>
-                  Sign out
-                </SubmitButton>
+                <SubmitButton pending="Signing out…">Sign out</SubmitButton>
               </form>
+              <HideToggle hidden={amountsHidden()} />
             </div>
           ) : null}
         </header>

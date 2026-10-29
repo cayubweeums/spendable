@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const password = typeof body.password === "string" ? body.password : "";
     const token = passwordIsSet()
       ? signIn(password, typeof body.name === "string" ? body.name : "")
-      : establishPassword(password, typeof body.confirm === "string" ? body.confirm : "");
+      : establishPassword(password, typeof body.confirm === "string" ? body.confirm : "", typeof body.name === "string" ? body.name : "");
     const jar = await cookies();
     jar.set(SESSION_COOKIE, token, sessionCookie);
     return Response.json({ ok: true });

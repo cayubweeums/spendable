@@ -92,6 +92,34 @@ test("a split divides one charge and leaves the bank amount", async () => {
     service.updateCategory("Split Groceries", { name: "Split Food" });
     assert.equal(store.getTransaction("split-shop")?.splits?.[0]?.category, "Split Food");
 
+    assert.throws(
+      () =>
+        service.saveTransactionDetails({
+          id: "split-shop",
+          category: "__split",
+          contains: "split shop",
+          remember: false,
+          billable: false,
+          recurring: false,
+          splits: [],
+        }),
+      /two parts/,
+    );
+    service.saveTransactionDetails({
+      id: "split-shop",
+      category: "__split",
+      contains: "split shop",
+      remember: false,
+      billable: false,
+      recurring: false,
+      splits: [
+        { category: "Split Food", amount: "20.00" },
+        { category: "Split Gas", amount: "22.00" },
+      ],
+    });
+    assert.equal(store.getTransaction("split-shop")?.category, null);
+    assert.equal(store.getTransaction("split-shop")?.splits?.length, 2);
+
     service.setSplits("split-shop", []);
     const cleared = store.getTransaction("split-shop");
     assert.equal(cleared?.splits?.length, 0);
