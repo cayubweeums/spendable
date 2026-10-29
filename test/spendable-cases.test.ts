@@ -104,6 +104,15 @@ describe("what gets subtracted", () => {
     assert.equal(short.receipt.lines.some((line) => line.label === "Buffer" && line.detail === ""), true);
   });
 
+  it("notes what last period left without adding it to this one", () => {
+    const snapshot = answer({
+      transactions: [txn({ id: "pay", amountCents: 3_000, description: "Pay", posted: isoToLocalNoonUnix("2026-10-23") })],
+    });
+    assert.equal(snapshot.spendableCents, 10_000);
+    assert.equal(snapshot.holdoverCents, 7_000);
+    assert.equal(snapshot.receipt.totalCents, 10_000);
+  });
+
   it("uses an available balance of zero instead of the ledger", () => {
     const snapshot = answer({
       accounts: [account({ id: "checking", role: "spend", balanceCents: 5_000, availableCents: 0 })],

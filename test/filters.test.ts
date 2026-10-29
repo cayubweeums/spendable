@@ -43,6 +43,11 @@ test("stacked filters narrow the charges and leave the balance", async () => {
     assert.equal(service.saveNamedFilter("Fuel", [gas, commute]), "Fuel");
     assert.deepEqual(service.readSavedFilter("Fuel"), [gas, commute]);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
+    assert.equal(service.needsCategory({ category: null, splits: [] }), true);
+    assert.equal(service.needsCategory({ category: "Gas", splits: [] }), false);
+    assert.equal(service.needsCategory({ category: null, splits: [{ category: "Filter Coffee" }] }), false);
+    assert.equal(service.chargesReturn("/charges?blank=1&sort=date&dir=desc"), "/charges?blank=1&sort=date&dir=desc");
+    assert.equal(service.chargesReturn("https://example.com"), "/");
   } finally {
     store.closeDb();
   }

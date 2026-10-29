@@ -347,6 +347,16 @@ function chargeMatches(filter: ChargeFilter, txn: Transaction, account: string, 
   return ruleMatches(filter, fact);
 }
 
+export function needsCategory(txn: { category: string | null; splits?: { category: string }[] }): boolean {
+  if (txn.category) return false;
+  return !(txn.splits ?? []).some((part) => part.category);
+}
+
+export function chargesReturn(value: string): string {
+  if (value === "/charges" || /^\/charges\?[A-Za-z0-9=&%._-]*$/.test(value)) return value;
+  return "/";
+}
+
 function csvCell(value: string): string {
   return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }

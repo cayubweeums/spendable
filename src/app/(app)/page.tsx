@@ -1,5 +1,5 @@
-import { addFilter, batchCharges, dropFilter, forgetFilter, keepFilter, saveSettings, saveTransaction, undoTransaction } from "../actions";
-import { ChargeCategory } from "@/components/charge-category";
+import { addFilter, batchCharges, dropFilter, forgetFilter, keepFilter, saveSettings, undoTransaction } from "../actions";
+import { ChargeEdit } from "@/components/charge-edit";
 import { MenuSelect } from "@/components/menu-select";
 import { PendingNote } from "@/components/pending-note";
 import { ReadFlash } from "@/components/read-flash";
@@ -114,6 +114,11 @@ export default async function HomePage({
               ? `Short ${money(-snapshot.spendableCents)} before ${day(snapshot.nextPayday)}.`
               : `${money(snapshot.perDayCents)} a day until ${day(snapshot.nextPayday)}.`}
           </p>
+          {snapshot.holdoverCents > 0 ? (
+            <p className="holdover">Last period left {money(snapshot.holdoverCents)} unspent.</p>
+          ) : snapshot.holdoverCents < 0 ? (
+            <p className="holdover">Last period ended {money(-snapshot.holdoverCents)} short. Try to keep some next time.</p>
+          ) : null}
         </section>
 
         <div className="lists">
@@ -312,49 +317,22 @@ export default async function HomePage({
                           {txn.cleared ? " · cleared" : null}
                           {bill ? " · monthly" : null}
                         </span>
-                        <form action={saveTransaction} className="txn-edit">
-                          <input type="hidden" name="id" value={txn.id} />
-                          <ChargeCategory
-                            categories={categories}
-                            category={txn.category}
-                            splits={txn.splits}
-                            amountCents={txn.amountCents}
-                            currency={txn.currency}
-                            hidden={hidden}
-                            numberFormat={settings.number}
-                            hideCents={settings.hideCents}
-                          />
-                          <details className="txn-more" suppressHydrationWarning>
-                            <summary>More</summary>
-                            <label>
-                              Note
-                              <input name="note" defaultValue={txn.note ?? ""} maxLength={280} />
-                            </label>
-                            <label>
-                              Tags
-                              <input name="tags" defaultValue={txn.tags.join(", ")} maxLength={200} />
-                            </label>
-                            <label>
-                              Description contains
-                              <input name="contains" defaultValue={rule?.contains ?? txn.description.slice(0, 80)} maxLength={80} />
-                            </label>
-                            <label className="check">
-                              <input type="checkbox" name="remember" value="1" defaultChecked={Boolean(rule)} />
-                              Use this category next time
-                            </label>
-                            {txn.amountCents < 0 ? (
-                              <>
-                                <input type="hidden" name="billable" value="1" />
-                                <label className="check">
-                                  <input type="checkbox" name="recurring" value="1" defaultChecked={Boolean(bill)} />
-                                  Count it as a monthly bill
-                                </label>
-                              </>
-                            ) : null}
-                            <PendingNote>Saving this charge.</PendingNote>
-                            <SubmitButton pending="Saving…">Save</SubmitButton>
-                          </details>
-                        </form>
+                        <ChargeEdit
+                          id={txn.id}
+                          category={txn.category}
+                          splits={txn.splits}
+                          amountCents={txn.amountCents}
+                          currency={txn.currency}
+                          note={txn.note ?? ""}
+                          tags={txn.tags}
+                          categories={categories}
+                          contains={rule?.contains ?? txn.description.slice(0, 80)}
+                          remembered={Boolean(rule)}
+                          monthly={Boolean(bill)}
+                          hidden={hidden}
+                          numberFormat={settings.number}
+                          hideCents={settings.hideCents}
+                        />
                       </td>
                       <td className="hide-sm quiet-note">{txn.accountName}</td>
                       <td className={txn.amountCents < 0 ? "num out" : "num"}>{money(txn.amountCents, txn.currency)}</td>

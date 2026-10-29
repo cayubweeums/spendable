@@ -29,6 +29,7 @@ type Input = Settings & {
   transactions: Transaction[];
   hideAmounts?: boolean;
   dateFormat?: DateFormat;
+  closing?: boolean;
 };
 
 function liquidCents(account: Account, transactions: Transaction[]): number {
@@ -131,6 +132,25 @@ function projectionRecorded(plan: Projection, transactions: Transaction[], previ
     const iso = postedToISO(txn.posted);
     return iso != null && iso >= previous && iso <= today;
   });
+}
+
+// shortcut: balance changes since payday are copied charges. Upgrade when the bank balance moves with no charge.
+function rewindAccounts(accounts: Account[], transactions: Transaction[], periodStart: string): Account[] {
+  return accounts.map((account) => {
+    const delta = transactions
+      .filter((txn) => txn.accountId === account.id && postedOnOrAfter(txn, periodStart))
+      .reduce((sum, txn) => sum + txn.amountCents, 0);
+    return {
+      ...account,
+      balanceCents: account.balanceCents - delta,
+      availableCents: account.availableCents == null ? null : account.availableCents - delta,
+    };
+  });
+}
+
+function postedOnOrAfter(txn: Transaction, periodStart: string): boolean {
+  const iso = postedToISO(txn.posted);
+  return iso != null && iso >= periodStart;
 }
 
 function billAlreadyRecorded(bill: Bill, transactions: Transaction[], previous: string, today: string): boolean {
@@ -327,7 +347,7 @@ export function computeSpendable(input: Input): Snapshot {
       currency: names.get(txn.accountId)?.currency ?? currency,
     }));
 
-  return {
+  const snapshot: Snapshot = {
     principle: PRINCIPLE,
     question: QUESTION,
     today: input.today,
@@ -340,6 +360,7 @@ export function computeSpendable(input: Input): Snapshot {
     daysUntilPayday,
     perDayCents: Math.trunc(spendableCents / daysUntilPayday),
     spendableCents,
+    holdoverCents: 0,
     monthGapCents: spendableCents - monthOutflowCents(transactions, spendIds, input.today),
     depositsCents: deposits
       .filter((account) => account.currency === currency)
@@ -360,4 +381,15 @@ export function computeSpendable(input: Input): Snapshot {
     },
     recent,
   };
+  if (!input.closing) {
+    const periodStart = previous;
+    snapshot.holdoverCents = computeSpendable({
+      ...input,
+      today: addDays(periodStart, -1),
+      accounts: rewindAccounts(input.accounts, input.transactions, periodStart),
+      transactions: input.transactions.filter((txn) => !postedOnOrAfter(txn, periodStart)),
+      closing: true,
+    }).spendableCents;
+  }
+  return snapshot;
 }
