@@ -1,5 +1,11 @@
 <p align="center">
-  <img src="docs/logo-lockup.jpg" alt="spendable" width="420">
+  <img src="docs/logo.svg" alt="spendable" width="320">
+</p>
+
+<p align="center">
+  <a href="https://github.com/cayubweeums/spendable/releases"><img src="https://img.shields.io/github/v/release/cayubweeums/spendable?style=flat-square&color=1c3d34" alt="release"></a>
+  <a href="https://github.com/cayubweeums/spendable/actions/workflows/main.yml"><img src="https://img.shields.io/github/actions/workflow/status/cayubweeums/spendable/main.yml?style=flat-square&label=build" alt="build"></a>
+  <a href="https://github.com/cayubweeums/spendable/pkgs/container/spendable"><img src="https://img.shields.io/badge/ghcr.io-spendable-1c3d34?style=flat-square" alt="image"></a>
 </p>
 
 # spendable
