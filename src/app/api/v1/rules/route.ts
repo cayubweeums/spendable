@@ -1,6 +1,6 @@
 import { guard, readJson } from "@/core/http";
 import { SpendableError } from "@/core/errors";
-import { learnRules, listMatchRules, saveRules, setLearnRules, type RuleInput } from "@/core/service";
+import { addMatchRule as serviceAddRule, learnRules, listMatchRules, saveRules, setLearnRules, type RuleInput } from "@/core/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,5 +29,27 @@ export function PUT(request: Request) {
     });
     if (typeof body.learn === "boolean") setLearnRules(body.learn);
     return { rules: saveRules(rules), learn: learnRules() };
+  });
+}
+
+export function POST(request: Request) {
+  return guard(request, async () => {
+    const body = await readJson(request);
+    if (!body || typeof body !== "object") throw new SpendableError("Not a choice.", "bad_rule");
+    if (!body.stage || !body.field || !body.op || !body.value || !body.action) {
+      throw new SpendableError("Rule needs stage, field, op, value, and action.", "bad_rule");
+    }
+    const rule: RuleInput = {
+      id: typeof body.id === "string" ? body.id : "",
+      ord: typeof body.ord === "number" && Number.isInteger(body.ord) ? body.ord : undefined,
+      stage: body.stage as RuleInput["stage"],
+      field: body.field as RuleInput["field"],
+      op: body.op as RuleInput["op"],
+      value: String(body.value),
+      action: body.action as RuleInput["action"],
+      actionValue: typeof body.actionValue === "string" ? body.actionValue : "",
+    };
+    const result = serviceAddRule(rule);
+    return { rule: result, rules: listMatchRules() };
   });
 }

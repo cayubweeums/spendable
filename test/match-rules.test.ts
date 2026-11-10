@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
 import { ruleMatches } from "../src/core/rules";
+import { SpendableError } from "../src/core/errors";
 
 const dir = mkdtempSync(path.join(tmpdir(), "spendable-match-"));
 process.env.SPENDABLE_DB_PATH = path.join(dir, "spendable.db");
@@ -165,6 +166,26 @@ test("rules run in order, before then after, and leave a set field and the bank 
     assert.equal(store.getTransaction("fuel-new")?.category, "Gas");
     assert.throws(() => service.removeMatchRule("missing"), /No rule/);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
+
+    // addMatchRule appends and validates
+    const preCount = service.listMatchRules().length;
+    const added = service.addMatchRule({
+      id: "hello-pony",
+      stage: "after",
+      field: "description",
+      op: "contains",
+      value: "test rule",
+      action: "tag",
+      actionValue: "ponytail",
+    });
+    assert.ok(added.id);
+    assert.equal(service.listMatchRules().length, preCount + 1);
+    assert.ok(service.listMatchRules().some((r) => r.id === added.id));
+
+    // rejects missing required fields
+    const codes: string[] = [];
+    try { service.addMatchRule({ stage: "after" } as any); } catch (e: any) { if (e instanceof SpendableError) codes.push(e.code); }
+    assert.ok(codes.includes("bad_rule"), "should reject incomplete rule");
   } finally {
     service.closeDb();
   }

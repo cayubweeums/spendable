@@ -19,7 +19,7 @@ import { GET as getCategories, POST as postCategories } from "../v1/categories/r
 import { DELETE as deleteCategory, PATCH as patchCategory } from "../v1/categories/[name]/route";
 import { GET as getPayees } from "../v1/payees/route";
 import { PATCH as patchPayee } from "../v1/payees/[name]/route";
-import { GET as getRules, PUT as putRules } from "../v1/rules/route";
+import { GET as getRules, PUT as putRules, POST as postRule } from "../v1/rules/route";
 import { DELETE as deleteRule } from "../v1/rules/[id]/route";
 import { GET as getSettings, PATCH as patchSettings } from "../v1/settings/route";
 import { DELETE as deleteConnection, GET as getConnection, PATCH as patchConnection, POST as postConnection } from "../v1/connection/route";
@@ -70,6 +70,7 @@ export const mcpHandlers = {
   "PATCH /api/v1/payees/:name": patchPayee,
   "GET /api/v1/rules": getRules,
   "PUT /api/v1/rules": putRules,
+  "POST /api/v1/rules": postRule,
   "DELETE /api/v1/rules/:id": deleteRule,
   "GET /api/v1/settings": getSettings,
   "PATCH /api/v1/settings": patchSettings,

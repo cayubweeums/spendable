@@ -36,6 +36,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/rules", purpose: "Rules in the order they run, and whether saving a category learns a rule." },
     { method: "PUT", path: "/api/v1/rules", purpose: "Replace the rules and run them. Notes, date, amount, payee, or cleared can be copied from the charge; description and category can also be referenced. Rules can set a new description from any field. Body learn turns learning on or off. Does not change a balance or the bank text." },
     { method: "DELETE", path: "/api/v1/rules/:id", purpose: "Delete a rule. Leaves what it already wrote. Does not change a balance." },
+    { method: "POST", path: "/api/v1/rules", purpose: "Append a single new rule (stage, field, op, value, action) at the end of the existing set and run it. Returns the created rule and the full updated list. Does not change a balance or the bank text." },
     { method: "GET", path: "/api/v1/settings", purpose: "Payday, buffer, and how figures are shown." },
     { method: "PATCH", path: "/api/v1/settings", purpose: "Update payday, bufferCents, date (mdy, dmy, ymd), number (us, eu), weekStart (0 or 1), and hideCents. Does not change a balance." },
     { method: "GET", path: "/api/v1/connection", purpose: "Whether a bank is connected. Never returns the access URL." },
