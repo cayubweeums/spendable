@@ -1175,6 +1175,18 @@ export function setTransactionCleared(id: string, cleared: boolean): void {
   db().prepare("UPDATE transactions SET cleared = ? WHERE id = ?").run(cleared ? 1 : 0, id);
 }
 
+export function setTransactionDescription(id: string, description: string): number {
+  const result = db().prepare("UPDATE transactions SET description = ? WHERE id = ?").run(description, id);
+  if (Number(result.changes ?? 0)) {
+    // Update or create payee_keys entry for the new description
+    const keyRow = db().prepare("SELECT name FROM payee_keys WHERE description = ?").get(description) as { name: string } | undefined;
+    if (!keyRow) {
+      db().prepare("INSERT INTO payee_keys (description, name) VALUES (?, ?)").run(description, description);
+    }
+  }
+  return Number(result.changes ?? 0);
+}
+
 export function deleteTransaction(id: string): void {
   const database = db();
   database.prepare("DELETE FROM splits WHERE transaction_id = ?").run(id);
@@ -1249,7 +1261,20 @@ function loadRuleFacts(onlyId?: string): RuleFactRow[] {
     .all(...(onlyId ? [onlyId] : [])) as RuleFactRow[];
 }
 
-// shortcut: a rule fills an empty category, note, or tag. Date, amount, and cleared replace the charge. A payee changes only while its name is still the bank text. Amount does not change the account balance.
+// shortcut: a rule fills an empty category, note, or tag. Date, amount, and cleared replace the charge. A payee changes only while its name is still the bank text. A description swap moves the payee mapping. Amount does not change the account balance.
+function setRuleDescription(description: string, next: string): number {
+  if (!description || description === next) return 0;
+  db().prepare("UPDATE transactions SET description = ? WHERE description = ?").run(next, description);
+  // Move any payee_keys entry from old to new description
+  const keyRow = db().prepare("SELECT name FROM payee_keys WHERE description = ?").get(description) as { name: string } | undefined;
+  if (keyRow) {
+    db().prepare("UPDATE payee_keys SET description = ? WHERE description = ?").run(next, description);
+  } else if (!db().prepare("SELECT 1 AS ok FROM payee_keys WHERE description = ?").get(next)) {
+    db().prepare("INSERT INTO payee_keys (description, name) VALUES (?, ?)").run(next, next);
+  }
+  return 1;
+}
+
 function setRulePayee(description: string, next: string): number {
   if (!description || description === next) return 0;
   const key = db().prepare("SELECT name FROM payee_keys WHERE description = ?").get(description) as { name: string } | undefined;
@@ -1350,6 +1375,14 @@ export function applyMatchRules(stage: RuleStage, onlyId?: string): number {
         db().prepare("UPDATE transactions SET cleared = ? WHERE id = ?").run(flag ? 1 : 0, fact.id);
         fact.cleared = flag;
         changed += 1;
+        continue;
+      }
+      if (rule.action === "description") {
+        const next = sanitizeLabel(fillRuleValue(rule.actionValue, fact), 280);
+        if (next && setRuleDescription(fact.description, next)) {
+          fact.description = next;
+          changed += 1;
+        }
         continue;
       }
       const payee = sanitizeLabel(fillRuleValue(rule.actionValue, fact), 180);

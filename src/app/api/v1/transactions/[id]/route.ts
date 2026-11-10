@@ -16,10 +16,12 @@ export async function PATCH(request: Request, context: Context) {
     }
     const note = typeof body.note === "string" ? body.note : undefined;
     const tags = typeof body.tags === "string" ? body.tags : undefined;
+    const description = typeof body.description === "string" ? body.description : undefined;
     if (Array.isArray(body.splits)) {
       editCharge(id, {
         note,
         tags,
+        description,
         splits: body.splits.map((item) => {
           if (!item || typeof item !== "object") throw new SpendableError("A split needs a category.", "bad_split");
           const row = item as { category?: unknown; amount?: unknown };
@@ -30,7 +32,7 @@ export async function PATCH(request: Request, context: Context) {
         }),
       });
     } else {
-      editCharge(id, { category: typeof body.category === "string" ? body.category : null, note, tags });
+      editCharge(id, { category: typeof body.category === "string" ? body.category : null, note, tags, description });
     }
     return { transaction: listTransactions().find((txn) => txn.id === id) ?? null };
   });

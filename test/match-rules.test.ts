@@ -16,6 +16,7 @@ test("rules run in order, before then after, and leave a set field and the bank 
   const blank = {
     importedPayee: "",
     payee: "",
+    description: "",
     account: "",
     category: "",
     date: "",
