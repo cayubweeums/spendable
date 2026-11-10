@@ -741,6 +741,28 @@ export function deleteBill(id: string): number {
   return Number(result.changes ?? 0);
 }
 
+export function getBill(id: string): Bill | null {
+  const row = db().prepare("SELECT * FROM bills WHERE id = ?").get(id) as BillRow | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    amountCents: row.amount_cents,
+    dueDay: row.due_day,
+    active: row.active === 1,
+    matchText: row.match_text ?? null,
+  };
+}
+
+export function updateBill(
+  id: string,
+  patch: { active?: boolean },
+): void {
+  db()
+    .prepare("UPDATE bills SET active = ? WHERE id = ?")
+    .run(patch.active ? 1 : 0, id);
+}
+
 export function listProjections(): Projection[] {
   const rows = db().prepare("SELECT * FROM projections ORDER BY due_day, name COLLATE NOCASE").all() as {
     id: string;

@@ -7,7 +7,7 @@ import { GET as getReports } from "../v1/reports/route";
 import { GET as getAccounts } from "../v1/accounts/route";
 import { PATCH as patchAccount } from "../v1/accounts/[id]/route";
 import { GET as getBills, POST as postBills } from "../v1/bills/route";
-import { DELETE as deleteBill } from "../v1/bills/[id]/route";
+import { PATCH as patchBill, DELETE as deleteBill } from "../v1/bills/[id]/route";
 import { GET as getProjections, POST as postProjections } from "../v1/projections/route";
 import { DELETE as deleteProjection } from "../v1/projections/[id]/route";
 import { GET as getTransactions, POST as postTransactions } from "../v1/transactions/route";
@@ -50,6 +50,7 @@ export const mcpHandlers = {
   "PATCH /api/v1/accounts/:id": patchAccount,
   "GET /api/v1/bills": getBills,
   "POST /api/v1/bills": postBills,
+  "PATCH /api/v1/bills/:id": patchBill,
   "DELETE /api/v1/bills/:id": deleteBill,
   "GET /api/v1/projections": getProjections,
   "POST /api/v1/projections": postProjections,
