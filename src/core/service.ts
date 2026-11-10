@@ -1274,6 +1274,12 @@ function chargesFor(ids: string[]): Transaction[] {
 }
 
 // shortcut: one category, or a copy. Neither writes the balance. Undo still covers one charge, not the batch.
+// Batch size: accepts 2+ unique IDs (via pickedIds dedup). For single transactions use editCharge/patch_transactions_id.
+/**
+ * Set a category on multiple charges at once.
+ * @param ids - Array of transaction IDs (minimum 2, duplicates removed)
+ * @param category - Category name to set, or null to clear the category
+ */
 export function editCharges(ids: string[], category: string | null): void {
   ready();
   const rows = chargesFor(pickedIds(ids));
@@ -1283,6 +1289,11 @@ export function editCharges(ids: string[], category: string | null): void {
   });
 }
 
+/**
+ * Duplicate charges with given IDs. Copies category, note, tags, and splits.
+ * @param ids - Array of transaction IDs to duplicate (minimum 2)
+ * @returns Array of new transaction IDs matching the originals
+ */
 export function copyCharges(ids: string[]): string[] {
   ready();
   const rows = chargesFor(pickedIds(ids));
@@ -1310,6 +1321,11 @@ export function copyCharges(ids: string[]): string[] {
 }
 
 // shortcut: two charges. A blank field is filled from the other. The bank row stays when the other is a copy. The amount stays. A deleted bank row comes back on sync.
+/**
+ * Merge two charges into one, preserving uncopied fields (category, note, tags, cleared).
+ * @param ids - Exactly 2 transaction IDs on the same account
+ * @returns The ID of the surviving charge
+ */
 export function mergeCharges(ids: string[]): string {
   ready();
   const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];

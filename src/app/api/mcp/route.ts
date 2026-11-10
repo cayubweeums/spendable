@@ -29,6 +29,10 @@ import { GET as getBackup, POST as postBackup } from "../v1/backup/route";
 import { POST as postImport } from "../v1/import/route";
 import { handleMcp, type McpOutcome } from "@/core/mcp";
 
+// MCP proxy layer: maps JSON-RPC tool calls to API route handlers.
+// Each MCP tool name is generated as `method_path` (e.g., `post_/api/v1/transactions`).
+// The proxy copies auth cookies from the outer request to the inner handler, so MCP sessions work transparently.
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
