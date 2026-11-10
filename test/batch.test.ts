@@ -23,6 +23,7 @@ test("a batch sets one category or copies the charges and leaves the balance", a
     assert.equal(rows.length, 2);
     const [first, second] = rows;
     assert.ok(first && second);
+    // Minimum 2 IDs required (pickedIds deduplicates and filters empties)
     assert.throws(() => service.editCharges([first.id], "Nope"), /Select two charges/);
 
     service.editCharges([first.id, second.id], "Batch");
@@ -42,6 +43,50 @@ test("a batch sets one category or copies the charges and leaves the balance", a
     assert.equal(store.getTransaction(first.id)?.id, first.id);
     assert.equal(store.getAccount("demo_checking")?.balanceCents, balance);
     assert.equal(service.getSnapshot().spendableCents, spendable);
+  } finally {
+    store.closeDb();
+  }
+});
+
+test("batch categorization works with many transactions and deduplicates IDs", async () => {
+  const service = await import("../src/core/service");
+  const store = await import("../src/core/db");
+  try {
+    service.ready();
+    const allTxns = store.listTransactions();
+    assert.ok(allTxns.length > 3, "Demo DB should have multiple transactions for testing");
+
+    // Use at least 5 unique IDs from the demo data
+    const txnIds = allTxns.slice(0, 5).map((t) => t.id);
+    const beforeCategories = new Map(txnIds.map((id) => [id, store.getTransaction(id)?.category]));
+
+    // Set same category on all 5 transactions
+    service.editCharges(txnIds, "BatchTest");
+
+    // Verify all got the category
+    for (const id of txnIds) {
+      assert.equal(store.getTransaction(id)?.category, "BatchTest");
+    }
+
+    // Deduplication: passing duplicate IDs should not cause issues
+    const duped = [...txnIds, ...txnIds.slice(0, 2)]; // 7 entries but only 5 unique
+    service.editCharges(duped, "DedupTest");
+    for (const id of txnIds) {
+      assert.equal(store.getTransaction(id)?.category, "DedupTest");
+    }
+
+    // Clear category on a subset by passing null
+    const toClear = [txnIds[0], txnIds[1]];
+    service.editCharges(toClear, null);
+    for (const id of toClear) {
+      assert.equal(store.getTransaction(id)?.category, null);
+    }
+
+    // Uncategorized transactions should not have been modified beyond expectations
+    const unchanged = allTxns.filter((t) => !txnIds.includes(t.id));
+    for (const txn of unchanged) {
+      assert.notEqual(store.getTransaction(txn.id)?.category, "DedupTest");
+    }
   } finally {
     store.closeDb();
   }
