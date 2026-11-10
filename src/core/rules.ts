@@ -34,6 +34,7 @@ export const RULE_STAGES = [
 export const RULE_FIELDS = [
   ["imported_payee", "Imported payee"],
   ["payee", "Payee"],
+  ["description", "Description"],
   ["account", "Account"],
   ["category", "Category"],
   ["date", "Date"],
@@ -53,6 +54,7 @@ export const RULE_OPS = [
 
 export const RULE_ACTIONS = [
   ["category", "Category"],
+  ["description", "Description"],
   ["payee", "Payee"],
   ["notes", "Notes"],
   ["tag", "Tag"],
@@ -65,6 +67,7 @@ export const RULE_ACTIONS = [
 export const RULE_SOURCES = [
   ["imported_payee", "Imported payee"],
   ["payee", "Payee"],
+  ["description", "Description"],
   ["account", "Account"],
   ["category", "Category"],
   ["date", "Date"],
@@ -77,6 +80,7 @@ export const RULE_SOURCES = [
 export const RULE_FIELD_OPS = {
   imported_payee: ["contains", "is"],
   payee: ["contains", "is"],
+  description: ["contains", "is"],
   account: ["contains", "is"],
   category: ["contains", "is"],
   notes: ["contains", "is"],
@@ -105,6 +109,7 @@ export type MatchRule = {
 export type RuleFact = {
   importedPayee: string;
   payee: string;
+  description: string;
   account: string;
   category: string;
   date: string;
@@ -114,7 +119,7 @@ export type RuleFact = {
   cleared: boolean;
 };
 
-const SOURCE_VALUE = /^\{\{(imported_payee|payee|account|category|date|notes|amount|tag|cleared)\}\}$/;
+const SOURCE_VALUE = /^\{\{(imported_payee|payee|description|account|category|date|notes|amount|tag|cleared)\}\}$/;
 
 export function ruleSource(actionValue: string): RuleSource | "" {
   const match = SOURCE_VALUE.exec(actionValue.trim());
@@ -125,6 +130,7 @@ export function fillRuleValue(actionValue: string, fact: RuleFact): string {
   const source = ruleSource(actionValue);
   if (source === "imported_payee") return fact.importedPayee;
   if (source === "payee") return fact.payee;
+  if (source === "description") return fact.description;
   if (source === "account") return fact.account;
   if (source === "category") return fact.category;
   if (source === "date") return fact.date;
@@ -183,10 +189,12 @@ export function ruleMatches(rule: Pick<MatchRule, "field" | "op" | "value">, fac
       ? fact.importedPayee
       : rule.field === "payee"
         ? fact.payee
-        : rule.field === "account"
-          ? fact.account
-          : rule.field === "category"
-            ? fact.category
-            : fact.notes;
+        : rule.field === "description"
+          ? fact.description
+          : rule.field === "account"
+            ? fact.account
+            : rule.field === "category"
+              ? fact.category
+              : fact.notes;
   return textMatch(rule.op, hay, rule.value);
 }

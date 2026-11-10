@@ -329,6 +329,7 @@ function chargeMatches(filter: ChargeFilter, txn: Transaction, account: string, 
   const fact = {
     importedPayee: txn.description,
     payee,
+    description: txn.description,
     account,
     category: txn.category ?? "",
     date: postedToISO(txn.posted) ?? "",
@@ -718,9 +719,11 @@ function normalizeRule(input: RuleInput, index: number): MatchRule {
       input.action === "date" ||
       input.action === "amount" ||
       input.action === "payee" ||
+      input.action === "description" ||
       input.action === "cleared");
   if (
     input.action !== "category" &&
+    input.action !== "description" &&
     input.action !== "payee" &&
     input.action !== "notes" &&
     input.action !== "tag" &&
@@ -730,7 +733,7 @@ function normalizeRule(input: RuleInput, index: number): MatchRule {
   ) {
     throw new SpendableError("Not a choice.", "bad_rule");
   }
-  const cap = input.action === "notes" ? 280 : input.action === "payee" ? 180 : 40;
+  const cap = input.action === "notes" ? 280 : input.action === "payee" ? 180 : input.action === "description" ? 280 : 40;
   const actionValue = templated ? `{{${ruleSource(input.actionValue)}}}` : sanitizeLabel(input.actionValue, cap);
   if (!actionValue) throw new SpendableError("Not a choice.", "bad_rule");
   if (!templated && input.action === "date" && !isISODate(actionValue)) throw new SpendableError("Bad date.", "bad_date");
@@ -1147,11 +1150,12 @@ function normalizeSplits(
 }
 
 // shortcut: one charge edit. A rule, a bill, or a rename stays. A second edit replaces this one.
-function holdCharge(txn: { id: string; category: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] }): void {
+function holdCharge(txn: { id: string; description: string; category: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] }): void {
   store.setMeta(
     "undo",
     JSON.stringify({
       id: txn.id,
+      description: txn.description,
       category: txn.category,
       note: txn.note ?? "",
       tags: txn.tags ?? [],
@@ -1169,7 +1173,7 @@ export function undoEdit(): void {
   ready();
   const raw = store.getMeta("undo");
   if (!raw) throw new SpendableError("Nothing to undo.", "no_undo");
-  let saved: { id?: string; category?: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] };
+  let saved: { id?: string; description?: string; category?: string | null; note?: string; tags?: string[]; splits?: { category: string; amountCents: number }[] };
   try {
     saved = JSON.parse(raw) as typeof saved;
   } catch {
@@ -1182,6 +1186,7 @@ export function undoEdit(): void {
   }
   const id = saved.id;
   store.withTransaction(() => {
+    if (saved.description != null) store.setTransactionDescription(id, saved.description);
     store.setTransactionCategory(id, saved.category ?? null);
     store.setTransactionNote(id, saved.note ?? "");
     store.setTransactionTags(id, Array.isArray(saved.tags) ? saved.tags : []);
@@ -1192,7 +1197,7 @@ export function undoEdit(): void {
 
 export function editCharge(
   id: string,
-  patch: { category?: string | null; note?: string; tags?: string; splits?: { category: string; amount: string }[] },
+  patch: { category?: string | null; note?: string; tags?: string; splits?: { category: string; amount: string }[]; description?: string },
 ): void {
   ready();
   const txn = store.getTransaction(id);
@@ -1209,6 +1214,9 @@ export function editCharge(
         throw new SpendableError("No transaction with that id.", "not_found", 404);
       }
       if (cleaned) learnMatch("imported_payee", txn.description, cleaned);
+    }
+    if (patch.description != null && store.setTransactionDescription(id, sanitizeLabel(patch.description, 280)) === 0) {
+      throw new SpendableError("No transaction with that id.", "not_found", 404);
     }
     if (patch.note != null && store.setTransactionNote(id, sanitizeLabel(patch.note, 280)) === 0) {
       throw new SpendableError("No transaction with that id.", "not_found", 404);
@@ -1257,6 +1265,17 @@ export function setTags(id: string, tags: string): void {
   if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
   holdCharge(txn);
   store.setTransactionTags(id, parseTags(tags));
+}
+
+export function setDescription(id: string, description: string): void {
+  ready();
+  const txn = store.getTransaction(id);
+  if (!txn) throw new SpendableError("No transaction with that id.", "not_found", 404);
+  holdCharge(txn);
+  const cleaned = sanitizeLabel(description, 280);
+  if (store.setTransactionDescription(id, cleaned) === 0) {
+    throw new SpendableError("No transaction with that id.", "not_found", 404);
+  }
 }
 
 function pickedIds(ids: string[]): string[] {
