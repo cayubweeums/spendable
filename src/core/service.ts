@@ -1014,6 +1014,16 @@ export function removeBill(id: string): void {
   if (store.deleteBill(id) === 0) throw new SpendableError("No bill with that id.", "not_found", 404);
 }
 
+export function patchBill(
+  id: string,
+  patch: { active?: boolean },
+): void {
+  ready();
+  const current = store.getBill(id);
+  if (!current) throw new SpendableError("No bill with that id.", "not_found", 404);
+  store.updateBill(id, { active: patch.active ?? current.active });
+}
+
 export function createProjection(input: {
   name: string;
   amountCents: number;

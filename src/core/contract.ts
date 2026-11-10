@@ -16,6 +16,7 @@ export const apiContract = {
     { method: "GET", path: "/api/v1/bills", purpose: "Bills held back before payday." },
     { method: "POST", path: "/api/v1/bills", purpose: "Add a bill. Body: name, amountCents, dueDay." },
     { method: "DELETE", path: "/api/v1/bills/:id", purpose: "Remove a bill." },
+    { method: "PATCH", path: "/api/v1/bills/:id", purpose: "Set the active flag on a bill. Body: active (boolean). Active bills show in the spendable figure; inactive ones hide." },
     { method: "GET", path: "/api/v1/projections", purpose: "Income, savings, and expenses on a day of the month. They count until a bank charge matches." },
     { method: "POST", path: "/api/v1/projections", purpose: "Add a projection. Body: name, amountCents, dueDay, kind (income, saving, expense), matchText. Does not change a balance." },
     { method: "DELETE", path: "/api/v1/projections/:id", purpose: "Remove a projection. Does not change a balance." },
