@@ -853,6 +853,18 @@ export function removeMatchRule(id: string): void {
   if (!store.deleteMatchRule(id)) throw new SpendableError("No rule.", "not_found", 404);
 }
 
+// shortcut: one condition and one action, appended at the end. A learned rule gets the last ord.
+export function addMatchRule(input: RuleInput): MatchRule {
+  ready();
+  const rules = store.listMatchRules();
+  const next = [...rules, normalizeRule(input, rules.length)];
+  store.withTransaction(() => {
+    store.replaceMatchRules(next);
+    store.applyImportedRules();
+  });
+  return next.at(-1)!;
+}
+
 function assertRole(role: string): Role {
   if (!ROLES.includes(role as Role)) throw new SpendableError("Unknown account role.", "bad_role");
   return role as Role;
